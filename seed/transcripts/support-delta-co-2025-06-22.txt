@@ -1,0 +1,15 @@
+Date: 2025-06-22
+Company: Delta Co
+Ticket: #4592
+
+Customer Support Request from John (Delta Co):
+"Hi team, I'm trying to use the new dashboard, but every time I click the 'Export PDF' button, the screen goes white and nothing downloads. This has happened 4 times today. Our executive meeting is in two hours and I need this report. Please help ASAP!"
+
+Support Reply (Alice):
+"Hi John, I'm so sorry about this. We're aware of the 'Export PDF' white screen issue (it's a known bug affecting Safari users). While we fix this, you can bypass it by using Chrome, or I can generate the report for you on the backend. Let me know!"
+
+John:
+"Chrome worked. Thanks. But this needs to be fixed. Also, it would be great if we could schedule these PDF exports to be emailed automatically every Monday morning. Is that possible?"
+
+Alice:
+"Glad it worked! Scheduled exports is a feature request we've heard before, I'll add your vote to it."

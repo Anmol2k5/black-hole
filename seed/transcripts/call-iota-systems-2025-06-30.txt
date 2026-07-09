@@ -1,0 +1,10 @@
+Date: 2025-06-30
+Company: Iota Systems
+Attendees: Sarah (Founder), Greg (Iota IT Admin)
+
+Sarah: Greg, how's the pilot going?
+Greg: Good, but we need admin roles. I can't have regular users deleting workspaces. Is there an admin panel?
+Sarah: Not yet, but we are designing a full role-based access control (RBAC) system.
+Greg: We need that urgently. Also, the search functionality is weak. It doesn't find partial word matches. I searched for "deploy" and it didn't find documents containing "deployment".
+Sarah: That's a great point. We use standard exact-match search right now. We'll look into upgrading it to fuzzy search or semantic search.
+Greg: Semantic search would be killer. Let me know when RBAC is ready.

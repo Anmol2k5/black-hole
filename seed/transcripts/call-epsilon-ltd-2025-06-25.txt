@@ -1,0 +1,10 @@
+Date: 2025-06-25
+Company: Epsilon Ltd
+Attendees: Mark (Sales), Emma (Epsilon CTO)
+
+Mark: Emma, thanks for joining. I wanted to touch base on the trial.
+Emma: We like the core functionality, but security is our biggest concern. We handle sensitive healthcare data. Does your platform support HIPAA compliance?
+Mark: We don't have official HIPAA certification yet, but our data is encrypted at rest and in transit.
+Emma: Without a BAA (Business Associate Agreement) and HIPAA compliance, we can't move forward. Also, you don't have Single Sign-On (SSO) integrated with Okta. We need Okta integration.
+Mark: SSO is coming in Q3. HIPAA might take longer.
+Emma: Let's pause the trial. Reach back out when you have Okta SSO and HIPAA.

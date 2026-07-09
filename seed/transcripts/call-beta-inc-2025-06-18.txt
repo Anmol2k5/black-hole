@@ -1,0 +1,11 @@
+Date: 2025-06-18
+Company: Beta Inc
+Attendees: Sarah (Founder), Lisa (Beta Product Manager)
+
+Sarah: Hey Lisa, how are things going with the platform?
+Lisa: We love it! The new analytics view is exactly what we needed. It's saving us hours every week.
+Sarah: That's great to hear! Any feature requests?
+Lisa: Yes, actually. We really need a Slack integration. Our team lives in Slack, and right now they have to switch contexts to see updates. If we could just get notifications in a Slack channel, that would be amazing.
+Sarah: That's a popular request. We have it on the roadmap for Q3.
+Lisa: Perfect. Also, one minor issue: when I export to CSV, the dates are formatted as DD/MM/YYYY instead of ISO format. It messes up our internal tools.
+Sarah: Ah, I'll log that as a bug. Thanks!

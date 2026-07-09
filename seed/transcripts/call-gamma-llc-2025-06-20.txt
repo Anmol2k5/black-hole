@@ -1,0 +1,12 @@
+Date: 2025-06-20
+Company: Gamma LLC
+Attendees: Mark (Sales), David (Gamma VP of Ops)
+
+Mark: David, following up on our proposal. What are your thoughts?
+David: To be honest, Mark, the pricing is a major objection for our procurement team. We're a 500-person company, and paying per-seat for everyone is too expensive. We only have 50 active users.
+Mark: I see. Would an active-user pricing model work better for you?
+David: Yes. CompetitorY offered us a flat rate for up to 100 active users. Can you match that?
+Mark: I'll have to get approval, but we can probably do something similar.
+David: Also, we need role-based access control (RBAC). We can't have everyone seeing financial data. If you don't have RBAC, it's a dealbreaker.
+Mark: We have basic permissions, but full RBAC is coming next month.
+David: Let's talk again when RBAC is live.

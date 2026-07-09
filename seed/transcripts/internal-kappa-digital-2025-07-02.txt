@@ -1,0 +1,12 @@
+Date: 2025-07-02
+Company: Kappa Digital
+Internal Notes (Sales Sync)
+
+Notes from Mark:
+Just got off a call with Kappa Digital. They are obsessed with the mobile app. The CEO literally said, "The mobile app is why we chose you over CompetitorY."
+
+However, they have one major request: Offline mode. Their field sales team uses the app on planes and in areas with bad reception. They want to be able to read their cached data without an internet connection.
+
+I told them offline mode is technically complex but I'd pass it to product. 
+
+Also, they reported that the "Export PDF" bug happened to them twice yesterday on Safari. We really need to fix that Safari bug, it's embarrassing.

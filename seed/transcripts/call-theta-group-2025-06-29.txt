@@ -1,0 +1,11 @@
+Date: 2025-06-29
+Company: Theta Group
+Attendees: Mark (Sales), Kevin (Theta Director)
+
+Mark: Kevin, how did you find the pricing page?
+Kevin: Confusing. I don't understand the difference between the "Pro" tier and the "Business" tier. It says Pro has "advanced analytics" but Business has "custom reporting". What does that even mean?
+Mark: Ah, sorry about that. Pro gives you predefined charts. Business lets you build your own.
+Kevin: You should make that clearer on the landing page. We almost didn't sign up because we couldn't figure out which tier we needed. 
+Mark: We'll rewrite the pricing copy. Any other feedback?
+Kevin: The mobile app is a bit clunky. It takes forever to load on iOS. 
+Mark: We have a major iOS update coming next week that fixes performance.

@@ -1,0 +1,11 @@
+Date: 2025-06-28
+Company: Eta Startup
+Attendees: Sarah (Founder), Alex (Eta Engineering Lead)
+
+Sarah: Hey Alex, you've been our most active users this month. How is it going?
+Alex: It's fantastic. The speed is great. But we're hitting a wall with automations. We want to trigger a webhook whenever a new document is added. 
+Sarah: Webhooks! That's interesting. 
+Alex: Yes. If we had webhooks, we could pipe the data into our internal Slack channels automatically. Without it, I have to write a script to poll your API every 5 minutes, which is inefficient.
+Sarah: Webhooks are a great idea. I think we can build that next month.
+Alex: Awesome. One minor bug: the search bar sometimes loses focus when I type fast. It's annoying.
+Sarah: I'll file a bug report for the search focus issue immediately.

@@ -1,0 +1,11 @@
+Date: 2025-06-15
+Company: Acme Corp
+Attendees: Sarah (Founder), Tom (Acme CTO)
+
+Sarah: Hi Tom, thanks for taking the time. How has your experience been with the product so far?
+Tom: It's mostly good, but the onboarding is frustrating. We had to manually invite 50 team members one by one. Why isn't there an API for this?
+Sarah: We're working on an API, but it's not prioritized right now.
+Tom: That's a huge pain point for us. Also, we keep hitting the rate limit on the reporting dashboard. It just says "Error 429" and crashes. That's a critical bug.
+Sarah: I'll note that down. What about pricing?
+Tom: The pricing is a bit steep for the enterprise tier. CompetitorX offers the same features for 20% less. If we don't get SSO included in our current tier, we might have to switch.
+Sarah: Okay, I understand. We'll look into adding SSO to the pro tier.
