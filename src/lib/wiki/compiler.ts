@@ -76,7 +76,7 @@ export function updateWikiFromExtraction(
           });
         }
       } else {
-        const items = (extraction.insights as Record<string, InsightItem[]>)[key] || [];
+        const items = (extraction.insights as unknown as Record<string, InsightItem[]>)[key] || [];
         for (const item of items) {
           allInsights.push({
             text: item.text,
@@ -174,7 +174,7 @@ function getAggregatedInsightsForPage(
           insights.push({ text: q, sourceQuote: '', sourceTitle, sourceDate, severity: 'medium' });
         }
       } else {
-        const items = (extraction.insights as Record<string, InsightItem[]>)?.[key] || [];
+        const items = (extraction.insights as unknown as Record<string, InsightItem[]>)?.[key] || [];
         for (const item of items) {
           insights.push({
             text: item.text,

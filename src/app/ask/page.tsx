@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'next';
+import { useState } from 'react';
 import { Send, Loader2, FileText, CheckCircle2, Search, BrainCircuit } from 'lucide-react';
 import { clsx } from 'clsx';
 import Link from 'next/link';

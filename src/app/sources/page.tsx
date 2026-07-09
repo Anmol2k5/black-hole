@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'next';
+import { useState, useEffect, Fragment } from 'react';
 import { FileText, Loader2, CheckCircle2, AlertCircle, FileArchive, FileJson, File, Calendar, Users, Building, Tag } from 'lucide-react';
 import { clsx } from 'clsx';
 import Link from 'next/link';
@@ -88,7 +88,7 @@ export default function SourcesPage() {
               </tr>
             ) : (
               sources.map(source => (
-                <React.Fragment key={source.id}>
+                <Fragment key={source.id}>
                   <tr 
                     className="hover:bg-muted/30 transition-colors cursor-pointer"
                     onClick={() => setExpandedId(expandedId === source.id ? null : source.id)}
@@ -123,7 +123,7 @@ export default function SourcesPage() {
                       </td>
                     </tr>
                   )}
-                </React.Fragment>
+                </Fragment>
               ))
             )}
           </tbody>

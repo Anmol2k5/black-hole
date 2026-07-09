@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'next';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { BookOpen, Loader2, Clock, CheckCircle2, ChevronRight, Hash } from 'lucide-react';
 import { clsx } from 'clsx';

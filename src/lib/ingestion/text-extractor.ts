@@ -33,7 +33,8 @@ export async function extractText(filePath: string, fileType: string): Promise<s
 async function extractPdf(filePath: string): Promise<string> {
   try {
     // pdf-parse has a quirky import
-    const pdfParse = (await import('pdf-parse')).default;
+    const pdfParseModule = (await import('pdf-parse')) as any;
+    const pdfParse = pdfParseModule.default || pdfParseModule;
     const buffer = fs.readFileSync(filePath);
     const data = await pdfParse(buffer);
     return data.text;

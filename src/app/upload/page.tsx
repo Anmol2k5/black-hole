@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'next';
+import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, FileText, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';

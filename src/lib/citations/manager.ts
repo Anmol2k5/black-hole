@@ -59,7 +59,7 @@ export function createCitationsFromExtraction(
   const citationItems: Array<{ pageId: string; claim: string; quote: string }> = [];
 
   for (const [key, pageSlugs] of Object.entries(insightToPages)) {
-    const items = (extraction.insights as Record<string, InsightItem[]>)[key] || [];
+    const items = (extraction.insights as unknown as Record<string, InsightItem[]>)[key] || [];
     for (const item of items) {
       for (const slug of pageSlugs) {
         const pageId = slugToId.get(slug);

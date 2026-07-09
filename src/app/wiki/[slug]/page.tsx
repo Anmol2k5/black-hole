@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'next';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, CheckCircle2, Clock, FileText, Quote, ChevronRight } from 'lucide-react';
