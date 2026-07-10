@@ -1,0 +1,10 @@
+Acme onboarding call — 2026-06-10
+
+Jane (Acme): Onboarding took us almost an hour and the setup was confusing.
+Bob (Us): Thanks, we are working on that.
+
+Jane: The big thing we need is Slack integration so our team gets alerts in one place.
+Bob: Noted, that is one of our most requested features.
+
+Jane: Honestly the pricing feels expensive for the value we get at our tier.
+Bob: I will pass that to the team.

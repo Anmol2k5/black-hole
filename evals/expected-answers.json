@@ -1,0 +1,43 @@
+{
+  "description": "Expected answers for the golden questions. Used to score retrieval and answer quality against the eval dataset.",
+  "goldenQuestions": [
+    {
+      "id": "q-top-complaints",
+      "question": "What are the top customer complaints?",
+      "expectEvidenceTypes": ["pain_point", "bug"],
+      "expectMinUniqueSources": 1
+    },
+    {
+      "id": "q-most-requested",
+      "question": "Which feature is requested most?",
+      "expectClaimType": "feature_request",
+      "expectUniqueSourceCount": 2
+    },
+    {
+      "id": "q-acme-pricing",
+      "question": "What did Acme say about pricing?",
+      "expectCompany": "Acme",
+      "expectClaimType": "pricing_feedback"
+    },
+    {
+      "id": "q-changed",
+      "question": "What changed this month?",
+      "expectDateRange": ["2026-06", "2026-07"]
+    },
+    {
+      "id": "q-contradiction",
+      "question": "Which feedback contradicts the roadmap?",
+      "expectContradiction": true
+    },
+    {
+      "id": "q-build-next",
+      "question": "What should we build next?",
+      "expectClaimType": "feature_request"
+    },
+    {
+      "id": "q-weakest",
+      "question": "Which conclusion has the weakest evidence?",
+      "expectConfidence": "low"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+Gamma support call — 2026-07-01
+
+Pat (Gamma): The onboarding process is painfully slow, it took us most of a day.
+Us: That is a known pain point, we are improving it.
+
+Pat: Also the docs assume a lot of prior knowledge.
+Us: Thanks, we will clarify the getting-started guide.
