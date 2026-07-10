@@ -13,7 +13,7 @@ A local-first, AI-maintained company second brain for startups. Company Brain OS
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15 (App Router), React, Tailwind CSS, shadcn/ui, lucide-react
+- **Frontend**: Next.js 16 (App Router), React, Tailwind CSS, shadcn/ui, lucide-react
 - **Backend**: Next.js API Routes (Node.js)
 - **Database**: SQLite (via `better-sqlite3`) for metadata, chunks, and citations
 - **Storage**: Local filesystem for raw files and generated Markdown wiki pages
@@ -21,11 +21,16 @@ A local-first, AI-maintained company second brain for startups. Company Brain OS
 
 ## Getting Started
 
+> **Requirements**: Node.js >= 20.16 (see `.nvmrc`). Use `nvm use` to match.
+
 1. **Clone the repository**
    ```bash
    git clone https://github.com/Anmol2k5/black-hole.git
-   cd black-hole/company-brain
+   cd black-hole
    ```
+
+   > The application lives at the repository root. If you checked out into a
+   > differently named folder, `cd` into that folder instead.
 
 2. **Install dependencies**
    ```bash
@@ -53,15 +58,21 @@ A local-first, AI-maintained company second brain for startups. Company Brain OS
 
 | Variable | Description | Default |
 |---|---|---|
-| \`LLM_PROVIDER\` | The LLM provider (\`openai\`, \`anthropic\`, \`ollama\`) | \`openai\` |
-| \`LLM_MODEL\` | The model to use for extraction and chat | \`gpt-4o-mini\` |
-| \`LLM_API_KEY\` | Your API key | \`\` |
-| \`LLM_BASE_URL\` | Custom endpoint (e.g., AgentRouter) | \`\` |
-| \`EMBEDDING_PROVIDER\` | The embedding provider (\`openai\`, \`ollama\`) | \`openai\` |
-| \`EMBEDDING_MODEL\` | The embedding model to use | \`text-embedding-3-small\` |
-| \`EMBEDDING_API_KEY\` | Your API key for embeddings | Uses \`LLM_API_KEY\` if unset |
-| \`DATA_DIR\` | Path to store files and wiki | \`./data\` |
-| \`COMPANY_NAME\` | Your company name | \`Our Company\` |
+| `LLM_PROVIDER` | The LLM provider. MVP uses `openai-compatible` (OpenAI, OpenRouter, Ollama `/v1`, Bedrock-compatible proxies). Direct Anthropic Messages API is not yet supported. | `openai-compatible` |
+| `LLM_MODEL` | The model to use for extraction and chat | `gpt-4o-mini` |
+| `LLM_API_KEY` | Your API key | `` |
+| `LLM_BASE_URL` | Custom OpenAI-compatible endpoint | `` |
+| `EXTRACTION_MODEL` | Cheaper model for high-volume extraction/classification (optional) | `LLM_MODEL` |
+| `ANSWER_MODEL` / `COMPILATION_MODEL` | Stronger model for synthesis (optional) | `LLM_MODEL` |
+| `EMBEDDING_PROVIDER` | The embedding provider (`openai-compatible`) | `openai-compatible` |
+| `EMBEDDING_MODEL` | The embedding model to use | `text-embedding-3-small` |
+| `EMBEDDING_API_KEY` | Your API key for embeddings | Uses `LLM_API_KEY` if unset |
+| `DATA_DIR` | Path to store files and wiki (single workspace root) | `./data` |
+| `DB_PATH` | Explicit override for the SQLite DB file (optional) | `<DATA_DIR>/brain.db` |
+| `MAX_FILE_SIZE_MB` | Max upload size per file | `10` |
+| `MAX_FILES_PER_UPLOAD` | Max files per upload request | `10` |
+| `ENABLE_SEED_ROUTE` | Enable the demo seed route (disable in production) | `false` |
+| `COMPANY_NAME` | Your company name | `Our Company` |
 
 ## Directory Structure
 

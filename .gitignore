@@ -32,10 +32,33 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-
-# vercel
-.vercel
+!.env.example
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ----------------------------------------------------------------------------
+# Black Hole local company data — NEVER commit real customer data or the DB
+# ----------------------------------------------------------------------------
+/data/
+/.company-brain/
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Generated knowledge
+/raw/
+/extracted/
+/wiki/
+/citations/
+
+# Uploads and temporary processing
+/uploads/
+/tmp/
+/temp/
+
+# Backups (contain real data + config)
+/backups/
