@@ -75,6 +75,8 @@ export const ChunkLocationSchema = z.object({
   pageNumber: z.number().optional(),
   rowStart: z.number().optional(),
   rowEnd: z.number().optional(),
+  charStart: z.number().optional(),
+  charEnd: z.number().optional(),
   timestampStart: z.number().optional(),
   timestampEnd: z.number().optional(),
   speaker: z.string().optional(),

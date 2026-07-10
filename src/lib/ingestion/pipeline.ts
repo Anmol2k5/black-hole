@@ -20,6 +20,7 @@ import { embedBatch } from "../embeddings/provider";
 import { extractInsights } from "../extraction/llm-extractor";
 import { updateWikiFromExtraction } from "../wiki/compiler";
 import { createCitationsFromExtraction } from "../citations/manager";
+import { storeObservationsForSource, rebuildClaims } from "../claims/repository";
 import {
   enqueue,
   updateProgress,
@@ -96,6 +97,7 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
       db.prepare("DELETE FROM chunks WHERE source_id = ?").run(sourceId);
       db.prepare("DELETE FROM extractions WHERE source_id = ?").run(sourceId);
       db.prepare("DELETE FROM citations WHERE source_id = ?").run(sourceId);
+      db.prepare("DELETE FROM observations WHERE source_id = ?").run(sourceId);
     });
     clear();
 
@@ -151,6 +153,12 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
       JSON.stringify(extraction.metadata),
       sourceId,
     );
+
+    // Store chunk-level observations and rebuild normalized claims.
+    if (extraction.observations && extraction.observations.length > 0) {
+      storeObservationsForSource("default", sourceId, extraction.observations);
+      rebuildClaims("default");
+    }
 
     // Step 5: compile wiki
     setStep(jobId, "Compiling wiki", 5);
