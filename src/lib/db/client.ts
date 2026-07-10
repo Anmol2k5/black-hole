@@ -1,32 +1,35 @@
 /**
  * SQLite database client singleton.
- * Auto-runs migrations on first access.
+ * Stores the DB under the single workspace root (DATA_DIR) and runs migrations
+ * on first access.
  */
 
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
-import { SCHEMA_SQL } from './schema';
+import Database from "better-sqlite3";
+import fs from "node:fs";
+import { getDatabasePath, getDatabaseDirectory, ensureWorkspaceDirectories } from "../paths";
+import { runMigrations } from "./migrate";
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (db) return db;
 
-  const dbDir = path.resolve(process.cwd(), '.company-brain');
+  ensureWorkspaceDirectories();
+
+  const dbDir = getDatabaseDirectory();
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
-  const dbPath = path.join(dbDir, 'brain.db');
+  const dbPath = getDatabasePath();
   db = new Database(dbPath);
 
   // Enable WAL mode for better concurrent read performance
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
 
-  // Run schema migrations
-  db.exec(SCHEMA_SQL);
+  // Run schema migrations (idempotent).
+  runMigrations(db);
 
   return db;
 }
