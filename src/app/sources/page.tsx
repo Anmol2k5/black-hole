@@ -133,7 +133,14 @@ export default function SourcesPage() {
   );
 }
 
-function SourceMetadata({ data, error }: { data: any, error?: string }) {
+interface SourceMetadataData {
+  date?: string;
+  people?: string[];
+  companies?: string[];
+  topics?: string[];
+}
+
+function SourceMetadata({ data, error }: { data: SourceMetadataData; error?: string }) {
   if (error) {
     return (
       <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-destructive">

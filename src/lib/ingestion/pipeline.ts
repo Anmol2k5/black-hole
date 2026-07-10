@@ -9,7 +9,7 @@ import { getConfig } from '../config';
 import { saveUploadedFile } from './file-storage';
 import { extractText } from './text-extractor';
 import { chunkText } from './chunker';
-import { embed, embedBatch } from '../embeddings/provider';
+import { embedBatch } from '../embeddings/provider';
 import { extractInsights } from '../extraction/llm-extractor';
 import { initializeWikiPages, updateWikiFromExtraction } from '../wiki/compiler';
 import { createCitationsFromExtraction } from '../citations/manager';
@@ -17,7 +17,7 @@ import { createCitationsFromExtraction } from '../citations/manager';
 export interface IngestionProgress {
   sourceId: string;
   jobId: string;
-  status: 'pending' | 'saving' | 'extracting' | 'chunking' | 'embedding' | 'analyzing' | 'compiling' | 'completed' | 'failed';
+  status: 'pending' | 'saving' | 'extracting' | 'chunking' | 'embedding' | 'analyzing' | 'compiling' | 'completed' | 'failed' | 'needs_ocr';
   step: string;
   error?: string;
 }
@@ -147,13 +147,14 @@ export async function ingestFile(
 
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
+    const needsOcr = err instanceof Error && (err as { needsOcr?: boolean }).needsOcr === true;
     updateJob(jobId, 'failed', 'Failed', error);
-    if (sourceId) updateSource(sourceId, 'failed', error);
+    if (sourceId) updateSource(sourceId, needsOcr ? 'needs_ocr' : 'failed', error);
 
     return {
       sourceId,
       jobId,
-      status: 'failed',
+      status: needsOcr ? 'needs_ocr' : 'failed',
       step: 'Failed',
       error,
     };

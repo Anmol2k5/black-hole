@@ -17,56 +17,57 @@ export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadStatus[]>([]);
   const [isSeeding, setIsSeeding] = useState(false);
 
+  const updateStatus = useCallback((filename: string, updates: Partial<UploadStatus>) => {
+    setUploads(prev => prev.map(u =>
+      u.file.name === filename ? { ...u, ...updates } : u
+    ));
+  }, []);
+
+  const processFile = useCallback(async (file: File) => {
+    updateStatus(file.name, { status: 'uploading', progress: 'Ingesting & Analyzing...' });
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+      const sourceId = data.results?.[0]?.sourceId ?? data.sourceId;
+      updateStatus(file.name, {
+        status: 'completed',
+        progress: 'Compiled into wiki',
+        sourceId,
+      });
+    } catch (err) {
+      updateStatus(file.name, {
+        status: 'error',
+        progress: 'Failed',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }, [updateStatus]);
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newUploads = acceptedFiles.map(file => ({
       file,
       status: 'pending' as const,
       progress: 'Waiting...',
     }));
-    
+
     setUploads(prev => [...prev, ...newUploads]);
-    
+
     // Process each file
     newUploads.forEach(upload => processFile(upload.file));
-  }, []);
+  }, [processFile]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
-
-  const processFile = async (file: File) => {
-    updateStatus(file.name, { status: 'uploading', progress: 'Ingesting & Analyzing...' });
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      
-      updateStatus(file.name, { 
-        status: 'completed', 
-        progress: 'Compiled into wiki',
-        sourceId: data.sourceId
-      });
-    } catch (err) {
-      updateStatus(file.name, { 
-        status: 'error', 
-        progress: 'Failed',
-        error: err instanceof Error ? err.message : 'Unknown error'
-      });
-    }
-  };
-
-  const updateStatus = (filename: string, updates: Partial<UploadStatus>) => {
-    setUploads(prev => prev.map(u => 
-      u.file.name === filename ? { ...u, ...updates } : u
-    ));
-  };
 
   const loadSeedData = async () => {
     setIsSeeding(true);

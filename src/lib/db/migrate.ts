@@ -8,6 +8,7 @@
 
 import type Database from "better-sqlite3";
 import * as m001 from "./migrations/001_initial";
+import * as m002 from "./migrations/002_checksum";
 
 export interface Migration {
   version: number;
@@ -17,6 +18,7 @@ export interface Migration {
 
 const MIGRATIONS: Migration[] = [
   { version: m001.version, name: m001.name, up: m001.up },
+  { version: m002.version, name: m002.name, up: m002.up },
 ];
 
 export function ensureMigrationsTable(db: Database.Database): void {

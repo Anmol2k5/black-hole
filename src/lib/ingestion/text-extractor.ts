@@ -1,92 +1,190 @@
 /**
  * Text extraction from various file formats.
+ *
+ * Every extractor either returns meaningful text or throws an ExtractionError.
+ * Extraction failures are NEVER returned as pseudo-content (that would later be
+ * embedded and compiled into the wiki).
  */
 
-import fs from 'fs';
+import fs from "node:fs";
+import { ExtractionError } from "./errors";
+
+const MIN_MEANINGFUL_CHARS = 20;
+
+function assertMeaningful(text: string, label: string): string {
+  if (text.trim().length < MIN_MEANINGFUL_CHARS) {
+    throw new ExtractionError(`No meaningful text could be extracted (${label}).`);
+  }
+  return text;
+}
 
 /**
  * Extract text content from a file based on its type.
  */
 export async function extractText(filePath: string, fileType: string): Promise<string> {
+  let text: string;
+
   switch (fileType) {
-    case 'txt':
-    case 'md':
-      return fs.readFileSync(filePath, 'utf-8');
-
-    case 'pdf':
-      return extractPdf(filePath);
-
-    case 'docx':
-      return extractDocx(filePath);
-
-    case 'csv':
-      return extractCsv(filePath);
-
-    case 'json':
-      return extractJson(filePath);
-
+    case "txt":
+    case "md":
+      text = fs.readFileSync(filePath, "utf-8");
+      break;
+    case "pdf":
+      text = await extractPdf(filePath);
+      break;
+    case "docx":
+      text = await extractDocx(filePath);
+      break;
+    case "csv":
+      text = await extractCsv(filePath);
+      break;
+    case "json":
+      text = extractJson(filePath);
+      break;
+    case "vtt":
+    case "srt":
+      text = extractTranscript(filePath, fileType);
+      break;
     default:
-      return fs.readFileSync(filePath, 'utf-8');
+      text = fs.readFileSync(filePath, "utf-8");
+      break;
   }
+
+  return assertMeaningful(text, fileType);
 }
 
 async function extractPdf(filePath: string): Promise<string> {
   try {
-    // pdf-parse has a quirky import
-    const pdfParseModule = (await import('pdf-parse')) as any;
-    const pdfParse = pdfParseModule.default || pdfParseModule;
+    const { PDFParse } = await import("pdf-parse");
     const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer);
-    return data.text;
+    const parser = new PDFParse({ data: buffer });
+
+    try {
+      const result = await parser.getText();
+      const text = result?.text?.trim() ?? "";
+      if (!text) {
+        throw new ExtractionError("PDF contains no extractable text (likely scanned).", {
+          needsOcr: true,
+        });
+      }
+      return text;
+    } finally {
+      await parser.destroy();
+    }
   } catch (err) {
-    console.error('PDF extraction failed:', err);
-    return `[PDF extraction failed: ${(err as Error).message}]`;
+    if (err instanceof ExtractionError) throw err;
+    throw new ExtractionError("PDF extraction failed", { cause: err });
   }
 }
 
 async function extractDocx(filePath: string): Promise<string> {
   try {
-    const mammoth = await import('mammoth');
+    const mammoth = await import("mammoth");
     const buffer = fs.readFileSync(filePath);
     const result = await mammoth.extractRawText({ buffer });
+    if (!result.value.trim()) {
+      throw new ExtractionError("DOCX contains no extractable text.");
+    }
     return result.value;
   } catch (err) {
-    console.error('DOCX extraction failed:', err);
-    return `[DOCX extraction failed: ${(err as Error).message}]`;
+    if (err instanceof ExtractionError) throw err;
+    throw new ExtractionError("DOCX extraction failed", { cause: err });
   }
 }
 
 async function extractCsv(filePath: string): Promise<string> {
   try {
-    const Papa = (await import('papaparse')).default;
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const result = Papa.parse(raw, { header: true });
+    const Papa = (await import("papaparse")).default;
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const parsed = Papa.parse(raw, { header: true, skipEmptyLines: true });
+    const rows = (parsed.data as Record<string, unknown>[]) || [];
 
-    if (!result.data || result.data.length === 0) return raw;
+    if (rows.length === 0) {
+      throw new ExtractionError("CSV has no data rows.");
+    }
 
-    // Convert CSV rows into readable text
-    const rows = result.data as Record<string, string>[];
+    const headers = (parsed.meta.fields || []).filter((h) => h && h.trim());
     const lines = rows.map((row, i) => {
-      const fields = Object.entries(row)
-        .filter(([, v]) => v && v.trim())
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(', ');
+      const fields = headers
+        .map((h) => {
+          const v = row[h];
+          const str = v == null ? "" : String(v).trim();
+          if (!str) return null;
+          // Avoid exploding extremely wide cells into the index.
+          const capped = str.length > 500 ? `${str.slice(0, 500)}…` : str;
+          return `${h}: ${capped}`;
+        })
+        .filter(Boolean)
+        .join(" | ");
       return `Row ${i + 1}: ${fields}`;
     });
 
-    return `CSV Data (${rows.length} rows):\n\n${lines.join('\n')}`;
+    return `CSV Data (${rows.length} rows, ${headers.length} columns):\n\n${lines.join("\n")}`;
   } catch (err) {
-    console.error('CSV extraction failed:', err);
-    return fs.readFileSync(filePath, 'utf-8');
+    if (err instanceof ExtractionError) throw err;
+    throw new ExtractionError("CSV extraction failed", { cause: err });
   }
 }
 
 function extractJson(filePath: string): string {
   try {
-    const raw = fs.readFileSync(filePath, 'utf-8');
+    const raw = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw);
-    return `JSON Document:\n\n${JSON.stringify(parsed, null, 2)}`;
-  } catch {
-    return fs.readFileSync(filePath, 'utf-8');
+    const text = `JSON Document:\n\n${JSON.stringify(parsed, null, 2)}`;
+    return text;
+  } catch (err) {
+    throw new ExtractionError("JSON extraction failed", { cause: err });
   }
+}
+
+/**
+ * Parse .vtt / .srt transcripts into timestamped, speaker-aware text.
+ */
+function extractTranscript(filePath: string, fileType: string): string {
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const isSrt = fileType === "srt";
+
+  const blocks = raw
+    .replace(/\r/g, "")
+    .split(/\n\s*\n/) // cues are separated by blank lines in both VTT and SRT
+    .map((b) => b.trim())
+    .filter(Boolean);
+
+  const cues: string[] = [];
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    // Drop the leading index line for SRT.
+    let start = 0;
+    if (isSrt && /^\d+$/.test(lines[0]?.trim() ?? "")) start = 1;
+
+    // Find the timestamp line.
+    let tsLine = -1;
+    for (let i = start; i < lines.length; i++) {
+      if (lines[i].includes("-->")) {
+        tsLine = i;
+        break;
+      }
+    }
+    if (tsLine === -1) continue;
+
+    const timestamp = lines[tsLine].split("-->")[0].trim();
+    const body = lines
+      .slice(tsLine + 1)
+      .join(" ")
+      .trim();
+    if (!body) continue;
+
+    const speakerMatch = body.match(/^([A-Z][\w.'-]*)\s*:\s*([\s\S]*)$/);
+    if (speakerMatch) {
+      cues.push(`[${timestamp}] ${speakerMatch[1]}: ${speakerMatch[2]}`);
+    } else {
+      cues.push(`[${timestamp}] ${body}`);
+    }
+  }
+
+  if (cues.length === 0) {
+    throw new ExtractionError("Transcript contains no recognizable cues.");
+  }
+
+  return `Transcript (${fileType.toUpperCase()}):\n\n${cues.join("\n")}`;
 }
