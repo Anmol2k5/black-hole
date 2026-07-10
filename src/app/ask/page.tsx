@@ -33,6 +33,23 @@ export default function AskPage() {
   const [query, setQuery] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [history, setHistory] = useState<Answer[]>([]);
+  const [savedUrls, setSavedUrls] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const saveToWiki = async (id: string) => {
+    if (!id || savingId) return;
+    setSavingId(id);
+    try {
+      const res = await fetch(`/api/answers/${id}/save-to-wiki`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save');
+      setSavedUrls((prev) => ({ ...prev, [id]: data.url }));
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   const askQuestion = async (q: string) => {
     if (!q.trim() || isAsking) return;
@@ -115,7 +132,7 @@ export default function AskPage() {
                   <div className="grid gap-3">
                     {item.evidence.map((ev, idx) => (
                       <div key={idx} className="bg-muted/50 rounded-lg p-3 text-sm border border-border/50">
-                        <p className="italic mb-2 text-muted-foreground">"{ev.quote}"</p>
+                        <p className="italic mb-2 text-muted-foreground">&ldquo;{ev.quote}&rdquo;</p>
                         <div className="flex items-center justify-between text-xs font-medium">
                           <span className="text-primary">{ev.sourceTitle}</span>
                           <span className="text-muted-foreground">{ev.sourceDate}</span>
@@ -156,9 +173,23 @@ export default function AskPage() {
             </div>
             
             <div className="px-6 py-3 bg-muted/30 border-t border-border flex justify-end">
-              <button className="text-xs font-medium text-primary hover:underline flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Save to Wiki as Synthesis
-              </button>
+              {savedUrls[item.id] ? (
+                <Link
+                  href={savedUrls[item.id]}
+                  className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+                >
+                  <CheckCircle2 className="w-3 h-3" /> Saved — View synthesis
+                </Link>
+              ) : (
+                <button
+                  onClick={() => saveToWiki(item.id)}
+                  disabled={savingId === item.id}
+                  className="text-xs font-medium text-primary hover:underline flex items-center gap-1 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                  {savingId === item.id ? 'Saving…' : 'Save to Wiki as Synthesis'}
+                </button>
+              )}
             </div>
           </div>
         ))}
