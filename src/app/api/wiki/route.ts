@@ -9,12 +9,27 @@ export async function GET(req: Request) {
     const db = getDb();
 
     if (slug) {
+      // Reject path traversal / absolute paths.
+      if (slug.includes('..') || slug.startsWith('/')) {
+        return NextResponse.json({ error: 'Invalid slug' }, { status: 400 });
+      }
+
+
       // Get specific page
       const page = db.prepare(`
         SELECT id, slug, title, category, content_md, source_count, confidence, updated_at
         FROM wiki_pages
         WHERE slug = ?
-      `).get(slug) as any;
+      `).get(slug) as {
+        id: string;
+        slug: string;
+        title: string;
+        category: string;
+        content_md: string;
+        source_count: number;
+        confidence: string;
+        updated_at: string;
+      } | undefined;
 
       if (!page) {
         return NextResponse.json({ error: 'Page not found' }, { status: 404 });

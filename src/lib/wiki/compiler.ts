@@ -148,7 +148,8 @@ function getAggregatedInsightsForPage(
     SELECT e.extraction_json, s.title, s.metadata_json, s.original_name
     FROM extractions e
     JOIN sources s ON s.id = e.source_id
-    WHERE s.status = 'completed'
+    WHERE e.extraction_json IS NOT NULL
+      AND s.status != 'failed'
   `).all() as Array<{
     extraction_json: string;
     title: string;
