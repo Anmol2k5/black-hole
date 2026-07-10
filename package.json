@@ -13,6 +13,7 @@
     "test:integration": "vitest run tests/integration",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:backup": "tsx scripts/backup-db.ts",
+    "worker": "tsx scripts/worker.ts",
     "seed": "tsx scripts/seed.ts"
   },
   "engines": {

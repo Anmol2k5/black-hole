@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ingestFile } from "@/lib/ingestion/pipeline";
+import { enqueueIngestion } from "@/lib/ingestion/pipeline";
 import {
   validateUploadFile,
   MAX_FILES_PER_REQUEST,
@@ -10,7 +10,6 @@ export async function POST(req: Request) {
   try {
     const formData = await req.formData();
 
-    // Accept either a single "file" or a "files" array.
     const entries = formData.getAll("files");
     const single = formData.get("file");
     const files = [...entries, ...(single ? [single] : [])].filter(
@@ -51,11 +50,13 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const result = await ingestFile(buffer, file.name);
-      results.push({ ...result, originalName: file.name });
+      // Validate + enqueue; processing happens asynchronously in the worker.
+      const enqueued = await enqueueIngestion(buffer, file.name);
+      results.push({ ...enqueued, originalName: file.name });
     }
 
-    return NextResponse.json({ results });
+    // 202 Accepted: the upload is received and queued, not yet processed.
+    return NextResponse.json({ results }, { status: 202 });
   } catch (err) {
     console.error("Upload error:", err);
     return NextResponse.json(

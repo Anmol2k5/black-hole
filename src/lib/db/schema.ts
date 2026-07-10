@@ -88,10 +88,16 @@ CREATE TABLE IF NOT EXISTS jobs (
   org_id TEXT NOT NULL DEFAULT 'default',
   source_id TEXT,
   job_type TEXT NOT NULL DEFAULT 'ingest', -- ingest, recompile, query
-  status TEXT NOT NULL DEFAULT 'pending',  -- pending, running, completed, failed
+  status TEXT NOT NULL DEFAULT 'queued',  -- queued, running, retrying, completed, failed, cancelled
   current_step TEXT,
   total_steps INTEGER DEFAULT 0,
   completed_steps INTEGER DEFAULT 0,
+  attempt_count INTEGER DEFAULT 0,
+  max_attempts INTEGER DEFAULT 3,
+  locked_at TEXT,
+  locked_by TEXT,
+  next_attempt_at TEXT,
+  progress_percent INTEGER DEFAULT 0,
   error TEXT,
   result_json TEXT,
   started_at TEXT,

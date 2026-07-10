@@ -1,87 +1,129 @@
 /**
- * Ingestion pipeline orchestrator.
- * Coordinates: save → extract text → chunk → embed → LLM extract → wiki compile → citations.
+ * Ingestion pipeline orchestrator (async / job-driven).
+ *
+ * Upload path: validate -> save raw file -> create source -> enqueue a job.
+ * Worker path: claim job -> run steps (extract, chunk, embed, analyze,
+ * compile, cite) updating job progress and source status.
+ *
+ * Reprocessing is idempotent: prior derived rows for a source are cleared in a
+ * single transaction before re-extraction, so chunks/extractions/citations are
+ * never duplicated.
  */
 
-import { v4 as uuid } from 'uuid';
-import { getDb } from '../db/client';
-import { getConfig } from '../config';
-import { saveUploadedFile } from './file-storage';
-import { extractText } from './text-extractor';
-import { chunkText } from './chunker';
-import { embedBatch } from '../embeddings/provider';
-import { extractInsights } from '../extraction/llm-extractor';
-import { initializeWikiPages, updateWikiFromExtraction } from '../wiki/compiler';
-import { createCitationsFromExtraction } from '../citations/manager';
+import { v4 as uuid } from "uuid";
+import { getDb } from "../db/client";
+import { getConfig } from "../config";
+import { saveUploadedFile } from "./file-storage";
+import { extractText } from "./text-extractor";
+import { chunkText } from "./chunker";
+import { embedBatch } from "../embeddings/provider";
+import { extractInsights } from "../extraction/llm-extractor";
+import { updateWikiFromExtraction } from "../wiki/compiler";
+import { createCitationsFromExtraction } from "../citations/manager";
+import {
+  enqueue,
+  updateProgress,
+  markCompleted,
+  markFailed,
+  type JobRow,
+} from "../jobs/queue";
 
-export interface IngestionProgress {
+const TOTAL_STEPS = 6;
+
+export interface EnqueuedIngestion {
   sourceId: string;
   jobId: string;
-  status: 'pending' | 'saving' | 'extracting' | 'chunking' | 'embedding' | 'analyzing' | 'compiling' | 'completed' | 'failed' | 'needs_ocr';
-  step: string;
-  error?: string;
+  status: "queued";
 }
 
 /**
- * Run the full ingestion pipeline for a single file.
+ * Validate (caller responsibility), persist the raw file, and enqueue a job.
+ * Returns immediately so the HTTP request does not block on LLM work.
  */
+export async function enqueueIngestion(
+  fileBuffer: Buffer,
+  originalName: string,
+): Promise<EnqueuedIngestion> {
+  const sourceId = await saveUploadedFile(fileBuffer, originalName);
+  const jobId = enqueue(sourceId, "ingest", TOTAL_STEPS);
+  return { sourceId, jobId, status: "queued" };
+}
+
+/** @deprecated kept for compatibility; prefer enqueueIngestion + worker. */
 export async function ingestFile(
   fileBuffer: Buffer,
   originalName: string,
-): Promise<IngestionProgress> {
+): Promise<EnqueuedIngestion> {
+  return enqueueIngestion(fileBuffer, originalName);
+}
+
+function setStep(jobId: string, step: string, completed: number): void {
+  updateProgress(jobId, step, completed, TOTAL_STEPS, Math.round((completed / TOTAL_STEPS) * 100));
+}
+
+function setSourceStatus(sourceId: string, status: string, error?: string): void {
   const db = getDb();
-  const jobId = uuid();
+  if (status === "completed") {
+    db.prepare("UPDATE sources SET status = ?, error = ?, processed_at = datetime('now') WHERE id = ?").run(
+      status,
+      error ?? null,
+      sourceId,
+    );
+  } else {
+    db.prepare("UPDATE sources SET status = ?, error = ? WHERE id = ?").run(status, error ?? null, sourceId);
+  }
+}
 
-  // Create job record
-  db.prepare(`
-    INSERT INTO jobs (id, job_type, status, current_step, started_at)
-    VALUES (?, 'ingest', 'running', 'saving', datetime('now'))
-  `).run(jobId);
+/**
+ * Process a single ingestion job. Called by the worker. Safe to re-invoke;
+ * derived rows are cleared first.
+ */
+export async function processIngestionJob(jobId: string, sourceId: string): Promise<void> {
+  const db = getDb();
 
-  let sourceId = '';
+  const source = db
+    .prepare("SELECT file_path, file_type, original_name FROM sources WHERE id = ?")
+    .get(sourceId) as { file_path: string; file_type: string; original_name: string } | undefined;
+
+  if (!source) {
+    markFailed(jobId, "Source not found");
+    return;
+  }
 
   try {
-    // Ensure wiki pages exist
-    initializeWikiPages();
+    // Idempotent reset of derived data for this source.
+    const clear = db.transaction(() => {
+      db.prepare("DELETE FROM chunks WHERE source_id = ?").run(sourceId);
+      db.prepare("DELETE FROM extractions WHERE source_id = ?").run(sourceId);
+      db.prepare("DELETE FROM citations WHERE source_id = ?").run(sourceId);
+    });
+    clear();
 
-    // Step 1: Save raw file
-    updateJob(jobId, 'running', 'Saving raw file');
-    sourceId = await saveUploadedFile(fileBuffer, originalName);
-    db.prepare('UPDATE jobs SET source_id = ? WHERE id = ?').run(sourceId, jobId);
-    updateSource(sourceId, 'extracting');
-
-    // Step 2: Extract text
-    updateJob(jobId, 'running', 'Extracting text');
-    const source = db.prepare('SELECT file_path, file_type FROM sources WHERE id = ?').get(sourceId) as {
-      file_path: string;
-      file_type: string;
-    };
+    // Step 1: extract text
+    setStep(jobId, "Extracting text", 1);
+    setSourceStatus(sourceId, "extracting");
     const text = await extractText(source.file_path, source.file_type);
-    db.prepare('UPDATE sources SET extracted_text = ? WHERE id = ?').run(text, sourceId);
+    db.prepare("UPDATE sources SET extracted_text = ? WHERE id = ?").run(text, sourceId);
 
-    // Step 3: Chunk text
-    updateJob(jobId, 'running', 'Chunking text');
-    updateSource(sourceId, 'analyzing');
+    // Step 2: chunk
+    setStep(jobId, "Chunking text", 2);
+    setSourceStatus(sourceId, "analyzing");
     const config = getConfig();
     const chunks = chunkText(text, config.maxChunkSize, config.chunkOverlap);
 
-    // Step 4: Generate embeddings
-    updateJob(jobId, 'running', 'Generating embeddings');
+    // Step 3: embeddings
+    setStep(jobId, "Generating embeddings", 3);
     let embeddings: number[][] = [];
     try {
-      embeddings = await embedBatch(chunks.map(c => c.content));
+      embeddings = await embedBatch(chunks.map((c) => c.content));
     } catch (err) {
-      console.warn('Embedding generation failed, continuing without embeddings:', err);
+      console.warn("Embedding generation failed, continuing without embeddings:", err);
       embeddings = chunks.map(() => []);
     }
 
-    // Step 5: Store chunks + embeddings
-    updateJob(jobId, 'running', 'Storing chunks');
-    const insertChunk = db.prepare(`
-      INSERT INTO chunks (id, source_id, content, chunk_index, char_start, char_end, embedding_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
+    const insertChunk = db.prepare(
+      "INSERT INTO chunks (id, source_id, content, chunk_index, char_start, char_end, embedding_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
     const insertChunks = db.transaction(() => {
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
@@ -91,98 +133,47 @@ export async function ingestFile(
     });
     insertChunks();
 
-    // Step 6: LLM extraction
-    updateJob(jobId, 'running', 'Analyzing with AI');
-    updateSource(sourceId, 'analyzing');
-    const extraction = await extractInsights(text, originalName);
-
-    // Store extraction
-    db.prepare(`
-      INSERT INTO extractions (id, source_id, extraction_json)
-      VALUES (?, ?, ?)
-    `).run(uuid(), sourceId, JSON.stringify(extraction));
-
-    // Update source metadata
-    db.prepare(`
-      UPDATE sources
-      SET title = ?, source_type = ?, summary = ?, metadata_json = ?
-      WHERE id = ?
-    `).run(
+    // Step 4: LLM extraction
+    setStep(jobId, "Analyzing with AI", 4);
+    setSourceStatus(sourceId, "analyzing");
+    const extraction = await extractInsights(text, source.original_name);
+    db.prepare("INSERT INTO extractions (id, source_id, extraction_json) VALUES (?, ?, ?)").run(
+      uuid(),
+      sourceId,
+      JSON.stringify(extraction),
+    );
+    db.prepare(
+      "UPDATE sources SET title = ?, source_type = ?, summary = ?, metadata_json = ? WHERE id = ?",
+    ).run(
       extraction.metadata.title,
       extraction.source_type,
       extraction.summary,
       JSON.stringify(extraction.metadata),
-      sourceId
-    );
-
-    // Step 7: Compile wiki pages
-    updateJob(jobId, 'running', 'Compiling wiki');
-    updateSource(sourceId, 'compiling');
-    updateWikiFromExtraction(
       sourceId,
-      extraction,
-      extraction.metadata.title || originalName,
-      extraction.metadata.date || '',
     );
 
-    // Step 8: Create citations
-    updateJob(jobId, 'running', 'Creating citations');
+    // Step 5: compile wiki
+    setStep(jobId, "Compiling wiki", 5);
+    setSourceStatus(sourceId, "compiling");
+    updateWikiFromExtraction(sourceId, extraction, extraction.metadata.title || source.original_name, extraction.metadata.date || "");
+
+    // Step 6: citations
+    setStep(jobId, "Creating citations", 6);
     createCitationsFromExtraction(
       sourceId,
       extraction,
-      extraction.metadata.title || originalName,
-      extraction.metadata.date || '',
+      extraction.metadata.title || source.original_name,
+      extraction.metadata.date || "",
     );
 
-    // Done!
-    updateJob(jobId, 'completed', 'Done');
-    updateSource(sourceId, 'completed');
-
-    return {
-      sourceId,
-      jobId,
-      status: 'completed',
-      step: 'Done',
-    };
-
+    setSourceStatus(sourceId, "completed");
+    markCompleted(jobId, { sourceId });
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     const needsOcr = err instanceof Error && (err as { needsOcr?: boolean }).needsOcr === true;
-    updateJob(jobId, 'failed', 'Failed', error);
-    if (sourceId) updateSource(sourceId, needsOcr ? 'needs_ocr' : 'failed', error);
-
-    return {
-      sourceId,
-      jobId,
-      status: needsOcr ? 'needs_ocr' : 'failed',
-      step: 'Failed',
-      error,
-    };
+    setSourceStatus(sourceId, needsOcr ? "needs_ocr" : "failed", error);
+    markFailed(jobId, error);
   }
 }
 
-function updateJob(jobId: string, status: string, step: string, error?: string): void {
-  const db = getDb();
-  if (status === 'completed' || status === 'failed') {
-    db.prepare(`
-      UPDATE jobs SET status = ?, current_step = ?, error = ?, completed_at = datetime('now') WHERE id = ?
-    `).run(status, step, error || null, jobId);
-  } else {
-    db.prepare(`
-      UPDATE jobs SET status = ?, current_step = ?, error = ? WHERE id = ?
-    `).run(status, step, error || null, jobId);
-  }
-}
-
-function updateSource(sourceId: string, status: string, error?: string): void {
-  const db = getDb();
-  if (status === 'completed') {
-    db.prepare(`
-      UPDATE sources SET status = ?, error = ?, processed_at = datetime('now') WHERE id = ?
-    `).run(status, error || null, sourceId);
-  } else {
-    db.prepare(`
-      UPDATE sources SET status = ?, error = ? WHERE id = ?
-    `).run(status, error || null, sourceId);
-  }
-}
+export type { JobRow };
