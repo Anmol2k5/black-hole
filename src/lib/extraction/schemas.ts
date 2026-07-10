@@ -51,3 +51,67 @@ export const ExtractionResultSchema = z.object({
 });
 
 export type ExtractionResult = z.infer<typeof ExtractionResultSchema>;
+
+// ---------------------------------------------------------------------------
+// Chunk-level observation extraction (Phase 9)
+// ---------------------------------------------------------------------------
+
+export const OBSERVATION_TYPES = [
+  "pain_point",
+  "feature_request",
+  "bug",
+  "sales_objection",
+  "pricing_feedback",
+  "competitor_mention",
+  "positive_feedback",
+  "negative_feedback",
+  "decision",
+  "question",
+] as const;
+
+export type ObservationType = (typeof OBSERVATION_TYPES)[number];
+
+export const ChunkLocationSchema = z.object({
+  pageNumber: z.number().optional(),
+  rowStart: z.number().optional(),
+  rowEnd: z.number().optional(),
+  timestampStart: z.number().optional(),
+  timestampEnd: z.number().optional(),
+  speaker: z.string().optional(),
+  sectionTitle: z.string().optional(),
+});
+
+export type ChunkLocation = z.infer<typeof ChunkLocationSchema>;
+
+export const ObservationSchema = z.object({
+  type: z.enum(OBSERVATION_TYPES),
+  text: z.string().min(1),
+  quote: z.string().optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  sentiment: z.enum(["positive", "neutral", "negative", "mixed"]),
+  entityNames: z.array(z.string()).default([]),
+  confidence: z.number().min(0).max(1),
+  location: ChunkLocationSchema.optional(),
+});
+
+export type Observation = z.infer<typeof ObservationSchema>;
+
+export const ExtractionMetaSchema = z.object({
+  extractor_version: z.string().default("1.0.0"),
+  prompt_version: z.string().default("1.0.0"),
+  model: z.string().default(""),
+  provider: z.string().default("openai-compatible"),
+  created_at: z.string().default(""),
+});
+
+export type ExtractionMeta = z.infer<typeof ExtractionMetaSchema>;
+
+// Extend ExtractionResult to optionally carry chunk-level observations and
+// extraction metadata, without breaking the legacy `insights` contract used
+// by the wiki compiler.
+export const ExtractionResultSchemaV2 = ExtractionResultSchema.extend({
+  observations: z.array(ObservationSchema).default([]),
+  extraction_meta: ExtractionMetaSchema.optional(),
+});
+
+export type ExtractionResultV2 = z.infer<typeof ExtractionResultSchemaV2>;

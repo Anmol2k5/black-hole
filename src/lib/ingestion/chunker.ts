@@ -73,3 +73,49 @@ export function chunkText(
 
   return chunks;
 }
+
+/**
+ * Split text into character-bounded segments that respect paragraph
+ * boundaries. Used for LLM extraction so long documents are covered fully
+ * (no head truncation) while staying within context limits.
+ */
+export function splitForExtraction(
+  text: string,
+  maxChars = 4000,
+  overlapChars = 200,
+): TextChunk[] {
+  if (!text || text.trim().length === 0) return [];
+
+  const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
+  const segments: TextChunk[] = [];
+  let current = "";
+  let chunkStart = 0;
+  let cursor = 0;
+
+  const flush = () => {
+    if (current.trim().length === 0) return;
+    segments.push({
+      content: current.trim(),
+      index: segments.length,
+      charStart: chunkStart,
+      charEnd: cursor,
+    });
+    const tail = current.trim().slice(-overlapChars);
+    current = tail;
+    chunkStart = Math.max(0, cursor - tail.length);
+  };
+
+  for (const para of paragraphs) {
+    const start = text.indexOf(para.trim(), cursor);
+    if (start >= 0) cursor = start;
+    const addition = (current.length > 0 ? "\n\n" : "") + para.trim();
+
+    if ((current + addition).length > maxChars && current.length > 0) {
+      flush();
+    }
+    current += addition;
+    cursor += para.trim().length;
+  }
+  flush();
+  return segments;
+}

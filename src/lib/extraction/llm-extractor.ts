@@ -1,65 +1,123 @@
 /**
- * LLM-based metadata and insight extraction.
- * Sends source text to LLM and extracts structured insights.
+ * LLM-based metadata and insight extraction (Phase 9 — map/reduce).
+ *
+ * The document is analyzed end-to-end:
+ *  - document-level metadata + summary from a leading sample
+ *  - chunk-level observations extracted from every segment (no truncation)
+ *  - observations merged/deduplicated and converted into the ExtractionResult
+ *    shape, with the raw observations preserved for the claims layer.
+ *
+ * Source text is wrapped as untrusted data so document content cannot
+ * commandeer the model (prompt-injection protection).
  */
 
-import { extractJSON } from '../llm/provider';
-import { ExtractionResultSchema, type ExtractionResult } from './schemas';
+import { getConfig } from "../config";
+import { extractJSON } from "../llm/provider";
+import { splitForExtraction } from "../ingestion/chunker";
+import {
+  ExtractionResultSchema,
+  ObservationSchema,
+  type ExtractionResultV2,
+  type Observation,
+} from "./schemas";
+import {
+  DOCUMENT_METADATA_PROMPT,
+  REDUCE_PROMPT,
+  wrapUntrustedSource,
+} from "./prompts";
+import { extractChunkObservations } from "./chunk-extractor";
+import { mergeObservations, buildExtractionResult, type DocumentMeta } from "./document-reducer";
 
-const EXTRACTION_PROMPT = `Analyze the following document and extract structured insights.
+const EXTRACT_SEGMENT_CHARS = 4000;
+const EXTRACT_OVERLAP_CHARS = 200;
+const META_SAMPLE_CHARS = 6000;
 
-The document may be a customer call transcript, meeting notes, support ticket, sales notes, or internal document.
+const DOC_META_SCHEMA = ExtractionResultSchema.pick({
+  summary: true,
+  source_type: true,
+  metadata: true,
+  suggested_wiki_pages: true,
+});
 
-Extract ALL of the following. Be thorough. Include direct quotes where available.
-
-Return a JSON object with this exact structure:
-{
-  "summary": "2-3 sentence summary of the document",
-  "source_type": "customer_call|meeting_notes|support_ticket|sales_notes|product_doc|internal_memo|feedback_form|slack_export|founder_notes|other",
-  "metadata": {
-    "title": "descriptive title for this document",
-    "date": "date mentioned in the document (ISO format) or empty string",
-    "people": ["names of people mentioned"],
-    "companies": ["company names mentioned"],
-    "product_areas": ["product areas or features discussed"],
-    "topics": ["key topics covered"],
-    "sentiment": "positive|neutral|negative|mixed",
-    "urgency": "low|medium|high|critical"
-  },
-  "insights": {
-    "pain_points": [{"text": "description", "context": "where in doc", "source_quote": "exact quote", "severity": "low|medium|high|critical"}],
-    "feature_requests": [{"text": "feature description", "context": "", "source_quote": "exact quote", "severity": "medium"}],
-    "bugs": [{"text": "bug description", "context": "", "source_quote": "", "severity": "medium"}],
-    "sales_objections": [{"text": "objection", "context": "", "source_quote": "", "severity": "medium"}],
-    "pricing_feedback": [{"text": "feedback", "context": "", "source_quote": "", "severity": "medium"}],
-    "competitor_mentions": [{"text": "competitor name and context", "context": "", "source_quote": "", "severity": "medium"}],
-    "positive_feedback": [{"text": "positive feedback", "context": "", "source_quote": "", "severity": "medium"}],
-    "negative_feedback": [{"text": "negative feedback", "context": "", "source_quote": "", "severity": "medium"}],
-    "decisions": [{"text": "decision made", "context": "", "source_quote": "", "severity": "medium"}],
-    "direct_quotes": [{"quote": "exact quote worth preserving", "speaker": "who said it", "context": "context"}],
-    "open_questions": ["unanswered questions from the document"]
-  },
-  "suggested_wiki_pages": ["product/requested-features", "sales/pricing-objections"]
+async function extractDocumentMeta(sample: string, filename: string): Promise<DocumentMeta> {
+  const prompt = DOCUMENT_METADATA_PROMPT + `\n\nFilename: ${filename}\n\n` + wrapUntrustedSource(sample);
+  try {
+    const parsed = await extractJSON(prompt, (raw) => DOC_META_SCHEMA.parse(raw));
+    return {
+      summary: parsed.summary,
+      source_type: parsed.source_type,
+      metadata: parsed.metadata,
+      suggested_wiki_pages: parsed.suggested_wiki_pages,
+    };
+  } catch (err) {
+    console.warn("Document metadata extraction failed, using defaults:", err);
+    return {
+      summary: "",
+      source_type: "other",
+      metadata: {
+        title: "Untitled",
+        date: "",
+        people: [],
+        companies: [],
+        product_areas: [],
+        topics: [],
+        sentiment: "neutral",
+        urgency: "medium",
+      },
+      suggested_wiki_pages: [],
+    };
+  }
 }
 
-Only include items that are actually present in the document. Do not invent data.
-Use empty arrays for categories with no relevant content.
-
-DOCUMENT:
-`;
-
 /**
- * Extract structured insights from a document using LLM.
+ * Extract structured insights from a document using LLM (map-reduce).
  */
 export async function extractInsights(
   text: string,
-  filename: string
-): Promise<ExtractionResult> {
-  const truncatedText = text.slice(0, 15000); // Limit to ~15K chars for API limits
+  filename: string,
+): Promise<ExtractionResultV2> {
+  // 1. Document-level metadata + summary (from a leading sample).
+  const docMeta = await extractDocumentMeta(text.slice(0, META_SAMPLE_CHARS), filename);
 
-  const prompt = EXTRACTION_PROMPT + `\nFilename: ${filename}\n\n${truncatedText}`;
+  // 2. Chunk-level observations across the WHOLE document.
+  const segments = splitForExtraction(text, EXTRACT_SEGMENT_CHARS, EXTRACT_OVERLAP_CHARS);
+  const allObservations: Observation[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const locationHint = { sectionIndex: i, charStart: seg.charStart, charEnd: seg.charEnd };
+    const obs = await extractChunkObservations(seg.content, locationHint);
+    allObservations.push(...obs);
+  }
 
-  return extractJSON<ExtractionResult>(prompt, (raw) => {
-    return ExtractionResultSchema.parse(raw);
-  });
+  // 3. Reduce / merge.
+  const reduced = await reduceObservations(allObservations);
+
+  // 4. Build the ExtractionResult (preserves wiki-compatible `insights`).
+  const config = getConfig();
+  const meta = {
+    extractor_version: "1.0.0",
+    prompt_version: "1.0.0",
+    model: config.llmModel,
+    provider: config.llmProvider,
+    created_at: new Date().toISOString(),
+  };
+
+  return buildExtractionResult(reduced, docMeta, meta);
+}
+
+async function reduceObservations(observations: Observation[]): Promise<Observation[]> {
+  if (observations.length <= 1) return mergeObservations(observations);
+
+  const prompt =
+    REDUCE_PROMPT + "\n\n" + JSON.stringify({ observations });
+  try {
+    const result = await extractJSON<{ observations?: unknown[] }>(prompt, (raw) => {
+      const obs = (raw as { observations?: unknown[] }).observations ?? [];
+      return { observations: obs.map((o) => ObservationSchema.parse(o)) };
+    });
+    return mergeObservations((result.observations ?? []) as Observation[]);
+  } catch (err) {
+    console.warn("Observation reduce failed, using local merge:", err);
+    return mergeObservations(observations);
+  }
 }
