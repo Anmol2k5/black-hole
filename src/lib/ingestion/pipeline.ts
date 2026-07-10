@@ -18,7 +18,7 @@ import { extractText } from "./text-extractor";
 import { chunkText } from "./chunker";
 import { embedBatch } from "../embeddings/provider";
 import { extractInsights } from "../extraction/llm-extractor";
-import { updateWikiFromExtraction } from "../wiki/compiler";
+import { ensureWikiPagesFromDefinitions, compileWikiFromClaims } from "../wiki/compiler-v2";
 import { createCitationsFromExtraction } from "../citations/manager";
 import { storeObservationsForSource, rebuildClaims } from "../claims/repository";
 import {
@@ -160,10 +160,11 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
       rebuildClaims("default");
     }
 
-    // Step 5: compile wiki
+    // Step 5: compile wiki from the claims layer
     setStep(jobId, "Compiling wiki", 5);
     setSourceStatus(sourceId, "compiling");
-    updateWikiFromExtraction(sourceId, extraction, extraction.metadata.title || source.original_name, extraction.metadata.date || "");
+    ensureWikiPagesFromDefinitions();
+    compileWikiFromClaims("default");
 
     // Step 6: citations
     setStep(jobId, "Creating citations", 6);

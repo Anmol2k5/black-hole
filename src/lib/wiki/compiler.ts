@@ -7,6 +7,7 @@ import fs from 'fs';
 import { getDb } from '../db/client';
 import { dataPath } from '../config';
 import { WIKI_TEMPLATES, renderWikiPage, renderIndexPage } from './templates';
+import { ensureWikiPagesFromDefinitions } from './compiler-v2';
 import type { ExtractionResult, InsightItem } from '../extraction/schemas';
 
 interface AggregatedInsight {
@@ -22,6 +23,9 @@ interface AggregatedInsight {
  */
 export function initializeWikiPages(): void {
   const db = getDb();
+
+  // Seed claim-driven pages (PR8) in addition to legacy template pages.
+  ensureWikiPagesFromDefinitions();
 
   for (const template of WIKI_TEMPLATES) {
     const existing = db.prepare('SELECT id FROM wiki_pages WHERE slug = ?').get(template.slug);

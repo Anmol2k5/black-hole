@@ -11,6 +11,7 @@ import * as m001 from "./migrations/001_initial";
 import * as m002 from "./migrations/002_checksum";
 import * as m003 from "./migrations/003_job_durability";
 import * as m004 from "./migrations/004_observations_claims";
+import * as m005 from "./migrations/005_wiki_versions";
 
 export interface Migration {
   version: number;
@@ -23,6 +24,7 @@ const MIGRATIONS: Migration[] = [
   { version: m002.version, name: m002.name, up: m002.up },
   { version: m003.version, name: m003.name, up: m003.up },
   { version: m004.version, name: m004.name, up: m004.up },
+  { version: m005.version, name: m005.name, up: m005.up },
 ];
 
 export function ensureMigrationsTable(db: Database.Database): void {
