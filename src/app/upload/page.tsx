@@ -42,12 +42,34 @@ export default function UploadPage() {
     ));
   }, []);
 
-  const mapJobToUploadState = (job: Record<string, unknown>): Partial<UploadStatus> => {
+interface JobStatusResponse {
+  id: string;
+  status:
+    | "queued"
+    | "running"
+    | "retrying"
+    | "completed"
+    | "failed"
+    | "cancelled";
+  sourceStatus:
+    | "pending"
+    | "extracting"
+    | "analyzing"
+    | "compiling"
+    | "completed"
+    | "failed"
+    | "needs_ocr";
+  currentStep: string | null;
+  progressPercent: number;
+  error: string | null;
+}
+
+  const mapJobToUploadState = (job: JobStatusResponse): Partial<UploadStatus> => {
     if (job.sourceStatus === 'needs_ocr') {
       return { status: 'needs_ocr', progressLabel: 'Needs OCR (Text not found)', progressPercent: 100 };
     }
     if (job.status === 'failed') {
-      return { status: 'failed', progressLabel: 'Failed', progressPercent: job.progressPercent || 0, error: job.error };
+      return { status: 'failed', progressLabel: 'Failed', progressPercent: job.progressPercent || 0, error: job.error || undefined };
     }
     if (job.status === 'cancelled') {
       return { status: 'failed', progressLabel: 'Cancelled', progressPercent: job.progressPercent || 0 };
@@ -69,14 +91,14 @@ export default function UploadPage() {
   };
 
   // Create a ref for the pollJob function to avoid dependency cycles
-  const pollJobRef = useRef<(clientId: string, jobId: string) => Promise<void>>();
+  const pollJobRef = useRef<((clientId: string, jobId: string) => Promise<void>) | null>(null);
   
   const pollJob = useCallback(async (clientId: string, jobId: string) => {
     try {
       const response = await fetch(`/api/jobs/${jobId}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Job not found');
       
-      const job = await response.json();
+      const job = (await response.json()) as JobStatusResponse;
       updateStatus(clientId, mapJobToUploadState(job));
 
       const terminal =

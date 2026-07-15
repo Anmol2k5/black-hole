@@ -158,8 +158,8 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
     // Store chunk-level observations and rebuild normalized claims.
     if (extraction.observations && extraction.observations.length > 0) {
       storeObservationsForSource("default", sourceId, extraction.observations);
-      rebuildClaims("default");
     }
+    rebuildClaims("default");
 
     // Step 5: compile wiki from the claims layer
     setStep(jobId, "Compiling wiki", 5);

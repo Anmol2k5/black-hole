@@ -6,7 +6,7 @@ import { getDb } from '@/lib/db/client';
 
 export async function POST() {
   try {
-    if (process.env.ENABLE_SEED_ROUTE !== "true") {
+    if (process.env.ENABLE_SEED_ROUTE !== "true" && process.env.NEXT_PUBLIC_ENABLE_SEED_ROUTE !== "true") {
       return NextResponse.json({ error: "Seed route is disabled." }, { status: 404 });
     }
 

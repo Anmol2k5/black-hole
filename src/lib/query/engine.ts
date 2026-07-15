@@ -195,7 +195,18 @@ Return JSON:
     parsed = AnswerSchema.parse(safeJson(response.content) ?? { answer: response.content });
   }
 
-  const { valid, invalid } = validateEvidenceIds(registry.byId, parsed.evidenceIds);
+  function extractInlineEvidenceIds(ans: string): string[] {
+    return Array.from(ans.matchAll(/\[(E\d+)\]/g), (match) => match[1]);
+  }
+
+  const proposedIds = Array.from(
+    new Set([
+      ...parsed.evidenceIds,
+      ...extractInlineEvidenceIds(parsed.answer),
+    ])
+  );
+
+  const { valid, invalid } = validateEvidenceIds(registry.byId, proposedIds);
 
   const evidence: Evidence[] = valid.map((e) => ({
     ...e,
@@ -212,7 +223,7 @@ Return JSON:
   // Clean up any empty bracket pairs that might result or trailing spaces before punctuation
   cleanAnswer = cleanAnswer.replace(/\s+([.,!?])/g, "$1").replace(/\[\s*\]/g, "");
 
-  const coverage = measureCoverage(parsed.answer, invalid.length);
+  const coverage = measureCoverage(cleanAnswer, invalid.length);
   const uniqueSources = new Set(evidence.map((e) => e.sourceId)).size;
   const avgScore =
     evidence.length > 0

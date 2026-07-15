@@ -44,7 +44,7 @@ export function getCitationsForPage(wikiPageId: string): Citation[] {
       JOIN claim_evidence ce ON ce.claim_id = c.id
       JOIN observations o ON o.id = ce.observation_id
       JOIN sources s ON s.id = o.source_id
-      WHERE c.type IN (${typesIn}) AND c.unique_source_count >= ?
+      WHERE c.type IN (${typesIn}) AND c.unique_source_count >= ? AND c.status = 'active'
     `).all(...def.claimTypes, def.minimumEvidence) as Array<{
       source_id: string;
       source_title: string;
@@ -107,7 +107,7 @@ export function getPagesCitingSource(sourceId: string): string[] {
     FROM claims c
     JOIN claim_evidence ce ON ce.claim_id = c.id
     JOIN observations o ON o.id = ce.observation_id
-    WHERE o.source_id = ?
+    WHERE o.source_id = ? AND c.status = 'active'
   `).all(sourceId) as Array<{ type: string; unique_source_count: number }>;
 
   const slugs = new Set(explicit.map(r => r.slug));

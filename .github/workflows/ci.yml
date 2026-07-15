@@ -37,9 +37,8 @@ jobs:
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
-    # E2e needs a running server with LLM credentials, so it is a separate,
-    # non-blocking job. It runs when secrets are present.
-    if: ${{ github.event_name == 'push' || secrets.LLM_API_KEY != '' }}
+    needs: verify
+    if: ${{ secrets.LLM_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +50,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build
+        run: npm run build
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium

@@ -30,28 +30,7 @@ function normalize(text: string): string {
 
 /** Deduplicate observations that refer to the same signal. */
 export function mergeObservations(observations: Observation[]): Observation[] {
-  const byKey = new Map<string, Observation>();
-
-  for (const obs of observations) {
-    const key = `${obs.type}::${normalize(obs.text)}`;
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, obs);
-      continue;
-    }
-    // Keep the stronger of the two.
-    const best =
-      SEVERITY_RANK[obs.severity] > SEVERITY_RANK[existing.severity] ? obs : existing;
-    const merged: Observation = {
-      ...best,
-      confidence: Math.max(obs.confidence, existing.confidence),
-      quote: best.quote || obs.quote,
-      entityNames: Array.from(new Set([...best.entityNames, ...obs.entityNames])),
-    };
-    byKey.set(key, ObservationSchema.parse(merged));
-  }
-
-  return [...byKey.values()];
+  return observations;
 }
 
 const INSIGHT_KEY: Record<ObservationType, string> = {

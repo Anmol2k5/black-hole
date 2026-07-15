@@ -53,13 +53,21 @@ export function storeObservationsForSource(
   const tx = db.transaction(() => {
     for (const obs of observations) {
       const id = uuid();
-      let chunkId: string | null = null;
-      const pos = obs.location?.charStart;
-      if (pos != null) {
-        const c = db
-          .prepare("SELECT id FROM chunks WHERE source_id = ? AND char_start <= ? AND char_end >= ? LIMIT 1")
-          .get(sourceId, pos) as { id: string } | undefined;
-        chunkId = c?.id ?? null;
+      let chunkId = obs.location?.chunkId ?? null;
+
+      if (chunkId) {
+        const valid = db.prepare("SELECT id FROM chunks WHERE id = ? AND source_id = ?").get(chunkId, sourceId);
+        if (!valid) chunkId = null;
+      }
+
+      if (!chunkId) {
+        const pos = obs.location?.charStart;
+        if (pos != null) {
+          const c = db
+            .prepare("SELECT id FROM chunks WHERE source_id = ? AND char_start <= ? AND char_end >= ? LIMIT 1")
+            .get(sourceId, pos) as { id: string } | undefined;
+          chunkId = c?.id ?? null;
+        }
       }
       insert.run(
         id,
@@ -176,8 +184,8 @@ export interface ClaimView {
 export function getClaims(orgId: string = ORG, type?: string): ClaimView[] {
   const db = getDb();
   const sql = type
-    ? "SELECT id, type, canonical_text, confidence, mention_count, unique_source_count, status FROM claims WHERE org_id = ? AND type = ? ORDER BY confidence DESC, mention_count DESC"
-    : "SELECT id, type, canonical_text, confidence, mention_count, unique_source_count, status FROM claims WHERE org_id = ? ORDER BY confidence DESC, mention_count DESC";
+    ? "SELECT id, type, canonical_text, confidence, mention_count, unique_source_count, status FROM claims WHERE org_id = ? AND type = ? AND status = 'active' ORDER BY confidence DESC, mention_count DESC"
+    : "SELECT id, type, canonical_text, confidence, mention_count, unique_source_count, status FROM claims WHERE org_id = ? AND status = 'active' ORDER BY confidence DESC, mention_count DESC";
   const params = type ? [orgId, type] : [orgId];
   return db.prepare(sql).all(...params) as ClaimView[];
 }

@@ -26,8 +26,12 @@ export async function extractChunkObservations(
 
   const list = (result.observations ?? []) as Observation[];
 
-  // Attach any location hint that the model did not already provide.
-  return list.map((o) =>
-    o.location || !locationHint ? o : { ...o, location: locationHint as Observation["location"] },
-  );
+  // Merge the location hint into the model's location so chunkId is preserved.
+  return list.map((observation) => ({
+    ...observation,
+    location: {
+      ...(locationHint as Observation["location"]),
+      ...(observation.location ?? {}),
+    },
+  }));
 }

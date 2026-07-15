@@ -113,18 +113,6 @@ export async function extractInsights(
 }
 
 async function reduceObservations(observations: Observation[]): Promise<Observation[]> {
-  if (observations.length <= 1) return mergeObservations(observations);
-
-  const prompt =
-    REDUCE_PROMPT + "\n\n" + JSON.stringify({ observations });
-  try {
-    const result = await extractJSON<{ observations?: unknown[] }>(prompt, (raw) => {
-      const obs = (raw as { observations?: unknown[] }).observations ?? [];
-      return { observations: obs.map((o) => ObservationSchema.parse(o)) };
-    });
-    return mergeObservations((result.observations ?? []) as Observation[]);
-  } catch (err) {
-    console.warn("Observation reduce failed, using local merge:", err);
-    return mergeObservations(observations);
-  }
+  // Pass through directly to allow Claims layer to handle deduplication without discarding explicit evidence mapping.
+  return mergeObservations(observations);
 }

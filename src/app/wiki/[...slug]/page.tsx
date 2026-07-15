@@ -17,10 +17,10 @@ import remarkGfm from 'remark-gfm';
 import { clsx } from 'clsx';
 
 interface Citation {
-  claim_text: string;
+  claimText: string;
   quote: string | null;
-  source_title: string | null;
-  source_date: string | null;
+  sourceTitle: string | null;
+  sourceDate: string | null;
 }
 
 interface WikiPageData {
@@ -182,17 +182,17 @@ export default function WikiPageViewer() {
                   key={i}
                   className="text-sm space-y-2 pb-4 border-b border-border/50 last:border-0 last:pb-0"
                 >
-                  <p className="font-medium leading-snug">{c.claim_text}</p>
+                  <p className="font-medium leading-snug">{c.claimText}</p>
                   {c.quote && (
                     <p className="italic text-muted-foreground border-l-2 border-primary/30 pl-2">
                       &ldquo;{c.quote}&rdquo;
                     </p>
                   )}
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-primary truncate pr-2" title={c.source_title ?? ''}>
-                      {c.source_title}
+                    <span className="text-primary truncate pr-2" title={c.sourceTitle ?? ''}>
+                      {c.sourceTitle}
                     </span>
-                    <span className="text-muted-foreground shrink-0">{c.source_date}</span>
+                    <span className="text-muted-foreground shrink-0">{c.sourceDate}</span>
                   </div>
                 </div>
               ))
