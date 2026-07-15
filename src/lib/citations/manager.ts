@@ -78,7 +78,7 @@ export function getCitationsForPage(wikiPageId: string): Citation[] {
       FROM citations
       WHERE wiki_page_id = ?
       ORDER BY created_at DESC
-    `).all(wikiPageId) as any[];
+    `).all(wikiPageId) as Array<{ id: string; wikiPageId: string; sourceId: string; chunkId: string | null; claimText: string; quote: string | null; sourceTitle: string | null; sourceDate: string | null }>;
     
     return rows.map(r => ({
       ...r,

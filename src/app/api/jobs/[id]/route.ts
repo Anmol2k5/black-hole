@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getJob, requeue, cancel } from "@/lib/jobs/queue";
+import { getDb } from "@/lib/db/client";
 
 export async function GET(
   _req: Request,
@@ -14,7 +15,7 @@ export async function GET(
 
     let sourceStatus = "pending";
     if (job.source_id) {
-      const db = require("@/lib/db/client").getDb();
+      const db = getDb();
       const source = db.prepare("SELECT status FROM sources WHERE id = ?").get(job.source_id) as { status: string } | undefined;
       if (source) {
         sourceStatus = source.status;

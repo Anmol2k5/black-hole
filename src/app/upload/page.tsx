@@ -42,7 +42,7 @@ export default function UploadPage() {
     ));
   }, []);
 
-  const mapJobToUploadState = (job: any): Partial<UploadStatus> => {
+  const mapJobToUploadState = (job: Record<string, unknown>): Partial<UploadStatus> => {
     if (job.sourceStatus === 'needs_ocr') {
       return { status: 'needs_ocr', progressLabel: 'Needs OCR (Text not found)', progressPercent: 100 };
     }
@@ -68,6 +68,9 @@ export default function UploadPage() {
     };
   };
 
+  // Create a ref for the pollJob function to avoid dependency cycles
+  const pollJobRef = useRef<(clientId: string, jobId: string) => Promise<void>>();
+  
   const pollJob = useCallback(async (clientId: string, jobId: string) => {
     try {
       const response = await fetch(`/api/jobs/${jobId}`, { cache: 'no-store' });
@@ -84,7 +87,7 @@ export default function UploadPage() {
 
       if (!terminal) {
         const id = window.setTimeout(() => {
-          void pollJob(clientId, jobId);
+          if (pollJobRef.current) void pollJobRef.current(clientId, jobId);
         }, 1500);
         timeouts.current.set(clientId, id);
       }
@@ -93,6 +96,11 @@ export default function UploadPage() {
       updateStatus(clientId, { status: 'failed', progressLabel: 'Error tracking job' });
     }
   }, [updateStatus]);
+
+  // Keep ref updated
+  useEffect(() => {
+    pollJobRef.current = pollJob;
+  }, [pollJob]);
 
   const processFile = useCallback(async (uploadState: UploadStatus) => {
     updateStatus(uploadState.clientId, { status: 'uploading', progressLabel: 'Uploading...' });

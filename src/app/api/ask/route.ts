@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 
 export async function POST(req: Request) {
   try {
-    const { question, saveToWiki } = await req.json();
+    const { question } = await req.json();
 
     if (!question) {
       return NextResponse.json({ error: 'Question is required' }, { status: 400 });

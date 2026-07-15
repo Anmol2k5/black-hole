@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Activity, CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface Job {

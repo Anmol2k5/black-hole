@@ -5,12 +5,11 @@
  */
 
 import { v4 as uuid } from "uuid";
-import fs from "node:fs";
+
 import { getDb } from "../db/client";
 import { wikiPageDefinitions, type WikiPageDefinition } from "./definitions";
 import { renderClaimPage, type RenderedClaim, type RenderedSource } from "./renderer";
 import { getClaims } from "../claims/repository";
-import { getWikiDirectory } from "../paths";
 import { persistWikiMarkdown } from "./persistence";
 
 const ORG = "default";

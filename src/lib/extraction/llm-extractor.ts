@@ -27,8 +27,6 @@ import {
 import { extractChunkObservations } from "./chunk-extractor";
 import { mergeObservations, buildExtractionResult, type DocumentMeta } from "./document-reducer";
 
-const EXTRACT_SEGMENT_CHARS = 4000;
-const EXTRACT_OVERLAP_CHARS = 200;
 const META_SAMPLE_CHARS = 6000;
 
 const DOC_META_SCHEMA = ExtractionResultSchema.pick({

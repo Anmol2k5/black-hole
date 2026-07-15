@@ -145,7 +145,6 @@ export async function answerQuestion(question: string): Promise<AnswerResult> {
 
   const registry = buildEvidenceRegistry(selected, sourceMeta);
 
-  const wikiMatches = searchWikiPages(question);
   // Wiki context removed to save context window.
 
   if (selected.length === 0) {
