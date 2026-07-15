@@ -23,11 +23,15 @@ test("upload a transcript, then ask a question with evidence", async ({ page }) 
     ),
   ).toBeVisible();
 
-  // Go to jobs and wait for completion (or at least a terminal/active state).
+  // Go to jobs and wait for completion.
   await page.goto("/jobs");
   await expect(
-    page.getByText(/completed|failed|running|extracting|analyzing|compiling/i).first(),
+    page.getByText(/completed/i).first(),
   ).toBeVisible({ timeout: 120_000 });
+
+  await expect(
+    page.getByText(/failed/i),
+  ).toHaveCount(0);
 
   // Ask a question.
   await page.goto("/ask");
