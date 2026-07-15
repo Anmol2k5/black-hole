@@ -7,7 +7,6 @@
  */
 
 import {
-  ObservationSchema,
   type Observation,
   type ExtractionResult,
   type ExtractionResultV2,
@@ -16,17 +15,6 @@ import {
   OBSERVATION_TYPES,
   type ObservationType,
 } from "./schemas";
-
-const SEVERITY_RANK: Record<string, number> = {
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-};
-
-function normalize(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-}
 
 /** Deduplicate observations that refer to the same signal. */
 export function mergeObservations(observations: Observation[]): Observation[] {

@@ -30,8 +30,10 @@ export async function extractChunkObservations(
   return list.map((observation) => ({
     ...observation,
     location: {
-      ...(locationHint as Observation["location"]),
       ...(observation.location ?? {}),
+      chunkId: locationHint?.chunkId as string,
+      charStart: locationHint?.charStart as number,
+      charEnd: locationHint?.charEnd as number,
     },
   }));
 }

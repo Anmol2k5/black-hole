@@ -195,10 +195,6 @@ Return JSON:
     parsed = AnswerSchema.parse(safeJson(response.content) ?? { answer: response.content });
   }
 
-  function extractInlineEvidenceIds(ans: string): string[] {
-    return Array.from(ans.matchAll(/\[(E\d+)\]/g), (match) => match[1]);
-  }
-
   const proposedIds = Array.from(
     new Set([
       ...parsed.evidenceIds,
@@ -215,13 +211,7 @@ Return JSON:
   }));
 
   // Scrub invalid citation markers from the answer text
-  let cleanAnswer = parsed.answer;
-  for (const inv of invalid) {
-    const regex = new RegExp(`\\[${inv}\\]`, "g");
-    cleanAnswer = cleanAnswer.replace(regex, "");
-  }
-  // Clean up any empty bracket pairs that might result or trailing spaces before punctuation
-  cleanAnswer = cleanAnswer.replace(/\s+([.,!?])/g, "$1").replace(/\[\s*\]/g, "");
+  const cleanAnswer = removeInvalidEvidenceMarkers(parsed.answer, invalid);
 
   const coverage = measureCoverage(cleanAnswer, invalid.length);
   const uniqueSources = new Set(evidence.map((e) => e.sourceId)).size;
@@ -287,33 +277,17 @@ function safeJson(text: string): unknown | null {
   }
 }
 
-/**
- * Search wiki pages using FTS5.
- */
-function searchWikiPages(query: string): Array<{ slug: string; title: string; content: string }> {
-  const db = getDb();
-  try {
-    const ftsQuery = query.split(/\s+/).filter((w) => w.length > 2).join(" OR ");
-    if (!ftsQuery) return [];
-    return db
-      .prepare(
-        `SELECT wp.slug, wp.title, wp.content_md as content
-         FROM wiki_pages_fts f
-         JOIN wiki_pages wp ON wp.rowid = f.rowid
-         WHERE wiki_pages_fts MATCH ?
-         ORDER BY rank
-         LIMIT 5`,
-      )
-      .all(ftsQuery) as Array<{ slug: string; title: string; content: string }>;
-  } catch {
-    const likeQuery = `%${query}%`;
-    return db
-      .prepare(
-        `SELECT slug, title, content_md as content
-         FROM wiki_pages
-         WHERE content_md LIKE ? OR title LIKE ?
-         LIMIT 5`,
-      )
-      .all(likeQuery, likeQuery) as Array<{ slug: string; title: string; content: string }>;
+export function extractInlineEvidenceIds(ans: string): string[] {
+  return Array.from(ans.matchAll(/\[(E\d+)\]/g), (match) => match[1]);
+}
+
+export function removeInvalidEvidenceMarkers(ans: string, invalidIds: string[]): string {
+  let cleanAnswer = ans;
+  for (const inv of invalidIds) {
+    const regex = new RegExp(`\\[${inv}\\]`, "g");
+    cleanAnswer = cleanAnswer.replace(regex, "");
   }
+  // Clean up any empty bracket pairs that might result or trailing spaces before punctuation
+  cleanAnswer = cleanAnswer.replace(/\s+([.,!?])/g, "$1").replace(/\[\s*\]/g, "");
+  return cleanAnswer;
 }

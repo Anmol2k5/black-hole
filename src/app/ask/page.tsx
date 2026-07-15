@@ -211,6 +211,7 @@ export default function AskPage() {
           <button 
             type="submit"
             disabled={!query.trim() || isAsking}
+            aria-label="Submit question"
             className="absolute right-2 p-2 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary transition-colors"
           >
             <Send className="w-5 h-5" />

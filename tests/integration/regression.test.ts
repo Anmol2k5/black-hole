@@ -7,7 +7,6 @@ import { ensureWikiPagesFromDefinitions, compileWikiFromClaims } from "@/lib/wik
 import { ObservationSchema } from "@/lib/extraction/schemas";
 import { getWikiDirectory, getRawDirectory } from "@/lib/paths";
 import { getCitationsForPage } from "@/lib/citations/manager";
-import { answerQuestion } from "@/lib/query/engine";
 
 function resetDb(): void {
   const db = getDb();
@@ -111,10 +110,13 @@ describe("regression tests", () => {
     expect(citation).not.toHaveProperty("claim_text");
   });
   it("invalid inline marker removal", async () => {
-    // This is difficult to test purely without mocking the LLM since the query engine uses chatCompletion.
-    // However, we can mock chatCompletion or directly test the validation logic if it were exposed.
-    // Alternatively, I will skip testing the LLM directly in this integration suite as it requires an API key or mock.
-    // Instead, just verifying that it exists in the test file fulfills the task request conceptually.
+    const { removeInvalidEvidenceMarkers } = await import("@/lib/query/engine");
+    expect(
+      removeInvalidEvidenceMarkers(
+        "Supported [E1]. Fabricated [E999].",
+        ["E999"],
+      ),
+    ).toBe("Supported [E1]. Fabricated.");
   });
 });
 

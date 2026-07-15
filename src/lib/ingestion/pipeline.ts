@@ -174,6 +174,15 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
     const needsOcr = err instanceof Error && (err as { needsOcr?: boolean }).needsOcr === true;
     setSourceStatus(sourceId, needsOcr ? "needs_ocr" : "failed", error);
     markFailed(jobId, error);
+    try {
+      rebuildClaims("default");
+      await compileWikiFromClaims("default");
+    } catch (cleanupError) {
+      console.error(
+        "Failed to update knowledge after ingestion failure:",
+        cleanupError,
+      );
+    }
   }
 }
 

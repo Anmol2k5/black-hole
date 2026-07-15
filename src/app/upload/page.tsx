@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, FileText, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
+import { mapJobToUploadState, isTerminalState, type JobStatusResponse } from '@/lib/uploads/job-state';
 
 interface UploadStatus {
   clientId: string;
@@ -27,12 +28,22 @@ interface UploadStatus {
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadStatus[]>([]);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [seedEnabled, setSeedEnabled] = useState(false);
   const timeouts = useRef<Map<string, number>>(new Map());
+
+  // Fetch config on mount
+  useEffect(() => {
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(data => setSeedEnabled(!!data.seedEnabled))
+      .catch(() => setSeedEnabled(false));
+  }, []);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
+    const currentTimeouts = timeouts.current;
     return () => {
-      timeouts.current.forEach(id => window.clearTimeout(id));
+      currentTimeouts.forEach(id => window.clearTimeout(id));
     };
   }, []);
 
@@ -42,53 +53,7 @@ export default function UploadPage() {
     ));
   }, []);
 
-interface JobStatusResponse {
-  id: string;
-  status:
-    | "queued"
-    | "running"
-    | "retrying"
-    | "completed"
-    | "failed"
-    | "cancelled";
-  sourceStatus:
-    | "pending"
-    | "extracting"
-    | "analyzing"
-    | "compiling"
-    | "completed"
-    | "failed"
-    | "needs_ocr";
-  currentStep: string | null;
-  progressPercent: number;
-  error: string | null;
-}
 
-  const mapJobToUploadState = (job: JobStatusResponse): Partial<UploadStatus> => {
-    if (job.sourceStatus === 'needs_ocr') {
-      return { status: 'needs_ocr', progressLabel: 'Needs OCR (Text not found)', progressPercent: 100 };
-    }
-    if (job.status === 'failed') {
-      return { status: 'failed', progressLabel: 'Failed', progressPercent: job.progressPercent || 0, error: job.error || undefined };
-    }
-    if (job.status === 'cancelled') {
-      return { status: 'failed', progressLabel: 'Cancelled', progressPercent: job.progressPercent || 0 };
-    }
-    if (job.status === 'completed') {
-      return { status: 'completed', progressLabel: 'Compiled into wiki', progressPercent: 100 };
-    }
-    if (job.status === 'retrying') {
-      return { status: 'retrying', progressLabel: `Retrying... (${job.error || 'Unknown error'})`, progressPercent: job.progressPercent || 0 };
-    }
-    
-    // running or queued
-    const isRunning = job.status === 'running';
-    return {
-      status: isRunning ? 'processing' : 'queued',
-      progressLabel: isRunning ? (job.currentStep || 'Processing...') : 'Waiting...',
-      progressPercent: job.progressPercent || 0,
-    };
-  };
 
   // Create a ref for the pollJob function to avoid dependency cycles
   const pollJobRef = useRef<((clientId: string, jobId: string) => Promise<void>) | null>(null);
@@ -101,11 +66,7 @@ interface JobStatusResponse {
       const job = (await response.json()) as JobStatusResponse;
       updateStatus(clientId, mapJobToUploadState(job));
 
-      const terminal =
-        job.status === "completed" ||
-        job.status === "failed" ||
-        job.status === "cancelled" ||
-        job.sourceStatus === "needs_ocr";
+      const terminal = isTerminalState(job);
 
       if (!terminal) {
         const id = window.setTimeout(() => {
@@ -161,11 +122,13 @@ interface JobStatusResponse {
         jobId
       });
 
-      if (jobId) {
-        void pollJob(uploadState.clientId, jobId);
-      } else {
-        updateStatus(uploadState.clientId, { status: 'completed', progressLabel: 'Compiled into wiki', progressPercent: 100 });
+      if (!jobId) {
+        throw new Error(
+          "Upload was accepted without a processing job ID.",
+        );
       }
+
+      void pollJob(uploadState.clientId, jobId);
     } catch (err) {
       updateStatus(uploadState.clientId, {
         status: 'failed',
@@ -204,7 +167,6 @@ interface JobStatusResponse {
     }
   };
 
-  const seedEnabled = process.env.NEXT_PUBLIC_ENABLE_SEED_ROUTE === "true";
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">

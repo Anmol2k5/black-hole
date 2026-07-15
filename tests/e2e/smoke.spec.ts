@@ -9,17 +9,19 @@ import { test, expect } from "@playwright/test";
 
 test("upload a transcript, then ask a question with evidence", async ({ page }) => {
   await page.goto("/upload");
-  const dropzone = page.getByText(/drag .* drop|browse/i);
-  await expect(dropzone).toBeVisible();
+  await expect(
+    page.getByText("Click or drag files here"),
+  ).toBeVisible();
 
   // Upload a small transcript from the eval set.
   const fileInput = page.locator('input[type="file"]');
   await fileInput.setInputFiles("evals/transcripts/eval-acme.txt");
 
-  await page.getByRole("button", { name: /upload/i }).click();
-
-  // A 202-style queued response should appear and a job row should be created.
-  await expect(page.getByText(/queued|pending|uploaded/i).first()).toBeVisible({ timeout: 10_000 });
+  await expect(
+    page.getByText(
+      /waiting for processing|processing|compiled|queued/i,
+    ),
+  ).toBeVisible();
 
   // Go to jobs and wait for completion (or at least a terminal/active state).
   await page.goto("/jobs");
@@ -30,7 +32,7 @@ test("upload a transcript, then ask a question with evidence", async ({ page }) 
   // Ask a question.
   await page.goto("/ask");
   await page.getByPlaceholder(/ask|question/i).fill("Which feature is requested most?");
-  await page.getByRole("button", { name: /ask/i }).click();
+  await page.getByRole("button", { name: /submit question/i }).click();
 
   await expect(page.getByText(/evidence|source/i).first()).toBeVisible({ timeout: 60_000 });
 });

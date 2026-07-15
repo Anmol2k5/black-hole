@@ -15,13 +15,11 @@ import { getConfig } from "../config";
 import { extractJSON } from "../llm/provider";
 import {
   ExtractionResultSchema,
-  ObservationSchema,
   type ExtractionResultV2,
   type Observation,
 } from "./schemas";
 import {
   DOCUMENT_METADATA_PROMPT,
-  REDUCE_PROMPT,
   wrapUntrustedSource,
 } from "./prompts";
 import { extractChunkObservations } from "./chunk-extractor";
@@ -84,11 +82,15 @@ export async function extractInsights(
     // Attempt exact quote matching inside chunk.content to add offset metadata
     for (const o of obs) {
       if (o.quote) {
-        const localOffset = chunk.content.indexOf(o.quote);
-        if (localOffset >= 0) {
-          if (!o.location) o.location = {};
-          o.location.quoteStart = chunk.charStart + localOffset;
-          o.location.quoteEnd = chunk.charStart + localOffset + o.quote.length;
+        const offset = chunk.content.indexOf(o.quote);
+        if (offset >= 0) {
+          o.location = {
+            ...o.location,
+            quoteStart: chunk.charStart + offset,
+            quoteEnd: chunk.charStart + offset + o.quote.length,
+          };
+        } else {
+          o.quote = undefined;
         }
       }
     }

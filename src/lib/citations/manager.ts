@@ -2,9 +2,7 @@
  * Citation manager — tracks source→claim→wiki page relationships.
  */
 
-import { v4 as uuid } from 'uuid';
 import { getDb } from '../db/client';
-import type { ExtractionResult, InsightItem } from '../extraction/schemas';
 
 export interface Citation {
   id: string;
