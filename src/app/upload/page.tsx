@@ -1,33 +1,104 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, FileText, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface UploadStatus {
+  clientId: string;
   file: File;
-  status: 'pending' | 'uploading' | 'completed' | 'error';
-  progress: string;
-  error?: string;
   sourceId?: string;
+  jobId?: string;
+  status:
+    | 'pending'
+    | 'uploading'
+    | 'queued'
+    | 'processing'
+    | 'retrying'
+    | 'completed'
+    | 'needs_ocr'
+    | 'failed';
+  progressPercent: number;
+  progressLabel: string;
+  error?: string;
 }
 
 export default function UploadPage() {
   const [uploads, setUploads] = useState<UploadStatus[]>([]);
   const [isSeeding, setIsSeeding] = useState(false);
+  const timeouts = useRef<Map<string, number>>(new Map());
 
-  const updateStatus = useCallback((filename: string, updates: Partial<UploadStatus>) => {
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      timeouts.current.forEach(id => window.clearTimeout(id));
+    };
+  }, []);
+
+  const updateStatus = useCallback((clientId: string, updates: Partial<UploadStatus>) => {
     setUploads(prev => prev.map(u =>
-      u.file.name === filename ? { ...u, ...updates } : u
+      u.clientId === clientId ? { ...u, ...updates } : u
     ));
   }, []);
 
-  const processFile = useCallback(async (file: File) => {
-    updateStatus(file.name, { status: 'uploading', progress: 'Ingesting & Analyzing...' });
+  const mapJobToUploadState = (job: any): Partial<UploadStatus> => {
+    if (job.sourceStatus === 'needs_ocr') {
+      return { status: 'needs_ocr', progressLabel: 'Needs OCR (Text not found)', progressPercent: 100 };
+    }
+    if (job.status === 'failed') {
+      return { status: 'failed', progressLabel: 'Failed', progressPercent: job.progressPercent || 0, error: job.error };
+    }
+    if (job.status === 'cancelled') {
+      return { status: 'failed', progressLabel: 'Cancelled', progressPercent: job.progressPercent || 0 };
+    }
+    if (job.status === 'completed') {
+      return { status: 'completed', progressLabel: 'Compiled into wiki', progressPercent: 100 };
+    }
+    if (job.status === 'retrying') {
+      return { status: 'retrying', progressLabel: `Retrying... (${job.error || 'Unknown error'})`, progressPercent: job.progressPercent || 0 };
+    }
+    
+    // running or queued
+    const isRunning = job.status === 'running';
+    return {
+      status: isRunning ? 'processing' : 'queued',
+      progressLabel: isRunning ? (job.currentStep || 'Processing...') : 'Waiting...',
+      progressPercent: job.progressPercent || 0,
+    };
+  };
+
+  const pollJob = useCallback(async (clientId: string, jobId: string) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Job not found');
+      
+      const job = await response.json();
+      updateStatus(clientId, mapJobToUploadState(job));
+
+      const terminal =
+        job.status === "completed" ||
+        job.status === "failed" ||
+        job.status === "cancelled" ||
+        job.sourceStatus === "needs_ocr";
+
+      if (!terminal) {
+        const id = window.setTimeout(() => {
+          void pollJob(clientId, jobId);
+        }, 1500);
+        timeouts.current.set(clientId, id);
+      }
+    } catch (err) {
+      console.error(err);
+      updateStatus(clientId, { status: 'failed', progressLabel: 'Error tracking job' });
+    }
+  }, [updateStatus]);
+
+  const processFile = useCallback(async (uploadState: UploadStatus) => {
+    updateStatus(uploadState.clientId, { status: 'uploading', progressLabel: 'Uploading...' });
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', uploadState.file);
 
     try {
       const res = await fetch('/api/upload', {
@@ -39,32 +110,53 @@ export default function UploadPage() {
 
       if (!res.ok) throw new Error(data.error || 'Upload failed');
 
-      const sourceId = data.results?.[0]?.sourceId ?? data.sourceId;
-      updateStatus(file.name, {
-        status: 'completed',
-        progress: 'Compiled into wiki',
+      const result = data.results?.[0];
+      if (result?.status === 'duplicate') {
+        updateStatus(uploadState.clientId, {
+          status: 'completed',
+          progressLabel: 'Already uploaded',
+          sourceId: result.existingSourceId,
+          progressPercent: 100
+        });
+        return;
+      }
+
+      const sourceId = result?.sourceId ?? data.sourceId;
+      const jobId = result?.jobId ?? data.jobId;
+      
+      updateStatus(uploadState.clientId, {
+        status: 'queued',
+        progressLabel: 'Waiting for processing...',
         sourceId,
+        jobId
       });
+
+      if (jobId) {
+        void pollJob(uploadState.clientId, jobId);
+      } else {
+        updateStatus(uploadState.clientId, { status: 'completed', progressLabel: 'Compiled into wiki', progressPercent: 100 });
+      }
     } catch (err) {
-      updateStatus(file.name, {
-        status: 'error',
-        progress: 'Failed',
+      updateStatus(uploadState.clientId, {
+        status: 'failed',
+        progressLabel: 'Failed to upload',
         error: err instanceof Error ? err.message : 'Unknown error',
       });
     }
-  }, [updateStatus]);
+  }, [updateStatus, pollJob]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newUploads = acceptedFiles.map(file => ({
+      clientId: crypto.randomUUID(),
       file,
       status: 'pending' as const,
-      progress: 'Waiting...',
+      progressLabel: 'Waiting...',
+      progressPercent: 0,
     }));
 
     setUploads(prev => [...prev, ...newUploads]);
 
-    // Process each file
-    newUploads.forEach(upload => processFile(upload.file));
+    newUploads.forEach(upload => processFile(upload));
   }, [processFile]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
@@ -74,13 +166,15 @@ export default function UploadPage() {
     try {
       const res = await fetch('/api/seed', { method: 'POST' });
       if (!res.ok) throw new Error('Failed to load seed data');
-      alert('Seed data loaded successfully! Go check the Wiki.');
+      alert('Seed data enqueued successfully! Check the Jobs view or wait a few moments.');
     } catch (err) {
       alert(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsSeeding(false);
     }
   };
+
+  const seedEnabled = process.env.NEXT_PUBLIC_ENABLE_SEED_ROUTE === "true";
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -89,14 +183,16 @@ export default function UploadPage() {
           <h1 className="text-3xl font-bold tracking-tight mb-2">Upload Data</h1>
           <p className="text-muted-foreground">Upload call transcripts, meeting notes, and PDFs to compile into the wiki.</p>
         </div>
-        <button 
-          onClick={loadSeedData}
-          disabled={isSeeding}
-          className="px-4 py-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
-        >
-          {isSeeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-          Load Demo Data
-        </button>
+        {seedEnabled && (
+          <button 
+            onClick={loadSeedData}
+            disabled={isSeeding}
+            className="px-4 py-2 bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            {isSeeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            Load Demo Data
+          </button>
+        )}
       </div>
 
       <div 
@@ -122,21 +218,21 @@ export default function UploadPage() {
             <h3 className="font-medium text-sm">Upload Queue ({uploads.length})</h3>
           </div>
           <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">
-            {uploads.map((upload, i) => (
-              <li key={i} className="px-4 py-3 flex items-center gap-4">
+            {uploads.map((upload) => (
+              <li key={upload.clientId} className="px-4 py-3 flex items-center gap-4">
                 <FileText className="w-5 h-5 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{upload.file.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{upload.progress}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{upload.progressLabel} {upload.progressPercent > 0 && upload.progressPercent < 100 ? `(${upload.progressPercent}%)` : ''}</p>
                   {upload.error && (
                     <p className="text-xs text-destructive mt-0.5">{upload.error}</p>
                   )}
                 </div>
                 <div className="shrink-0">
                   {upload.status === 'pending' && <div className="w-2 h-2 rounded-full bg-muted-foreground" />}
-                  {upload.status === 'uploading' && <Loader2 className="w-5 h-5 text-primary animate-spin" />}
+                  {(upload.status === 'uploading' || upload.status === 'queued' || upload.status === 'processing' || upload.status === 'retrying') && <Loader2 className="w-5 h-5 text-primary animate-spin" />}
                   {upload.status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-                  {upload.status === 'error' && <AlertCircle className="w-5 h-5 text-destructive" />}
+                  {(upload.status === 'failed' || upload.status === 'needs_ocr') && <AlertCircle className="w-5 h-5 text-destructive" />}
                 </div>
               </li>
             ))}

@@ -82,14 +82,16 @@ export function storeObservationsForSource(
   return ids;
 }
 
-/** Rebuild all claims for an org from its observations. Idempotent. */
 export function rebuildClaims(orgId: string = ORG): void {
   const db = getDb();
   const rows = db
     .prepare("SELECT * FROM observations WHERE org_id = ?")
     .all(orgId) as StoredObservationRow[];
 
-  const observations: Observation[] = rows.map((r) => ({
+  const observations = rows.map((r) => ({
+    id: r.id,
+    source_id: r.source_id,
+    chunk_id: r.chunk_id,
     type: r.type as Observation["type"],
     text: r.text,
     quote: r.quote ?? undefined,
@@ -104,22 +106,19 @@ export function rebuildClaims(orgId: string = ORG): void {
 
   const clear = db.transaction(() => {
     db.prepare("DELETE FROM claim_evidence WHERE claim_id IN (SELECT id FROM claims WHERE org_id = ?)").run(orgId);
-    db.prepare("DELETE FROM claims WHERE org_id = ?").run(orgId);
+    db.prepare("UPDATE claims SET status = 'inactive' WHERE org_id = ?").run(orgId);
   });
   clear();
 
   const rebuild = db.transaction(() => {
     for (const cluster of clusters) {
-      const mentionCount = cluster.observations.length;
-      const uniqueSources = new Set(
-        rows
-          .filter((r) => cluster.observations.some((o) => o.text === r.text))
-          .map((r) => r.source_id),
-      ).size;
+      const clusterObs = cluster.observations as typeof observations;
+      const mentionCount = clusterObs.length;
+      const uniqueSources = new Set(clusterObs.map((o) => o.source_id)).size;
       const avgConf =
-        cluster.observations.reduce((s, o) => s + (o.confidence ?? 0.5), 0) / mentionCount;
+        clusterObs.reduce((s, o) => s + (o.confidence ?? 0.5), 0) / mentionCount;
       const maxSeverity = Math.max(
-        ...cluster.observations.map((o) => SEVERITY_RANK[o.severity] ?? 2),
+        ...clusterObs.map((o) => SEVERITY_RANK[o.severity] ?? 2),
       );
 
       const sourceDiversity = Math.min(1, uniqueSources / 3);
@@ -133,7 +132,14 @@ export function rebuildClaims(orgId: string = ORG): void {
       const claimId = claimIdFor(orgId, cluster.type, cluster.canonicalText);
       db.prepare(
         `INSERT INTO claims (id, org_id, type, canonical_text, status, confidence, mention_count, unique_source_count, unique_customer_count, first_seen_at, last_seen_at)
-         VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+         VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(id) DO UPDATE SET
+           status = 'active',
+           confidence = excluded.confidence,
+           mention_count = excluded.mention_count,
+           unique_source_count = excluded.unique_source_count,
+           unique_customer_count = excluded.unique_customer_count,
+           last_seen_at = datetime('now')`
       ).run(
         claimId,
         orgId,
@@ -147,11 +153,10 @@ export function rebuildClaims(orgId: string = ORG): void {
 
       // Link evidence (each observation in the cluster points at this claim).
       const link = db.prepare(
-        "INSERT OR IGNORE INTO claim_evidence (claim_id, observation_id, relation) VALUES (?, ?, 'supports')",
+        "INSERT INTO claim_evidence (claim_id, observation_id, relation) VALUES (?, ?, 'supports')"
       );
-      for (const obs of cluster.observations) {
-        const obsRow = rows.find((r) => r.text === obs.text && r.type === obs.type);
-        if (obsRow) link.run(claimId, obsRow.id);
+      for (const obs of clusterObs) {
+        link.run(claimId, obs.id);
       }
     }
   });

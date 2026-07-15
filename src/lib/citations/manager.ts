@@ -17,79 +17,77 @@ export interface Citation {
   sourceDate?: string;
 }
 
-/**
- * Create citations linking a source's extracted insights to wiki pages.
- */
-export function createCitationsFromExtraction(
-  sourceId: string,
-  extraction: ExtractionResult,
-  sourceTitle: string,
-  sourceDate: string,
-): void {
-  const db = getDb();
-
-  // Get all wiki pages
-  const pages = db.prepare('SELECT id, slug FROM wiki_pages').all() as Array<{ id: string; slug: string }>;
-  const slugToId = new Map(pages.map(p => [p.slug, p.id]));
-
-  // Map insight keys to wiki page slugs
-  const insightToPages: Record<string, string[]> = {
-    pain_points: ['strategy/customer-pain-points', 'support/repeated-complaints', 'product/roadmap-evidence'],
-    feature_requests: ['product/requested-features', 'product/roadmap-evidence'],
-    bugs: ['product/known-bugs', 'support/repeated-complaints'],
-    sales_objections: ['sales/pricing-objections', 'sales/lost-deal-reasons'],
-    pricing_feedback: ['sales/pricing-objections'],
-    competitor_mentions: ['sales/competitor-mentions', 'sales/lost-deal-reasons'],
-    positive_feedback: ['product/onboarding-feedback', 'synthesis/top-insights'],
-    negative_feedback: ['support/repeated-complaints', 'product/onboarding-feedback'],
-    decisions: ['synthesis/top-insights'],
-  };
-
-  const insert = db.prepare(`
-    INSERT INTO citations (id, wiki_page_id, source_id, claim_text, quote, source_title, source_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const insertMany = db.transaction((items: Array<{ pageId: string; claim: string; quote: string }>) => {
-    for (const item of items) {
-      insert.run(uuid(), item.pageId, sourceId, item.claim, item.quote, sourceTitle, sourceDate);
-    }
-  });
-
-  const citationItems: Array<{ pageId: string; claim: string; quote: string }> = [];
-
-  for (const [key, pageSlugs] of Object.entries(insightToPages)) {
-    const items = (extraction.insights as unknown as Record<string, InsightItem[]>)[key] || [];
-    for (const item of items) {
-      for (const slug of pageSlugs) {
-        const pageId = slugToId.get(slug);
-        if (pageId) {
-          citationItems.push({
-            pageId,
-            claim: item.text,
-            quote: item.source_quote || '',
-          });
-        }
-      }
-    }
-  }
-
-  if (citationItems.length > 0) {
-    insertMany(citationItems);
-  }
-}
+import { wikiPageDefinitions } from '../wiki/definitions';
 
 /**
  * Get all citations for a wiki page.
  */
 export function getCitationsForPage(wikiPageId: string): Citation[] {
   const db = getDb();
-  return db.prepare(`
-    SELECT id, wiki_page_id, source_id, chunk_id, claim_text, quote, source_title, source_date
-    FROM citations
-    WHERE wiki_page_id = ?
-    ORDER BY created_at DESC
-  `).all(wikiPageId) as Citation[];
+  const page = db.prepare('SELECT slug, is_generated FROM wiki_pages WHERE id = ?').get(wikiPageId) as { slug: string; is_generated: number };
+  if (!page) return [];
+
+  if (page.is_generated === 1) {
+    const def = wikiPageDefinitions.find(d => d.slug === page.slug);
+    if (!def || def.claimTypes.length === 0) return [];
+
+    const typesIn = def.claimTypes.map(() => '?').join(',');
+    const rows = db.prepare(`
+      SELECT DISTINCT 
+        s.id as source_id, 
+        s.title as source_title, 
+        s.metadata_json,
+        o.quote as quote,
+        c.canonical_text,
+        o.chunk_id
+      FROM claims c
+      JOIN claim_evidence ce ON ce.claim_id = c.id
+      JOIN observations o ON o.id = ce.observation_id
+      JOIN sources s ON s.id = o.source_id
+      WHERE c.type IN (${typesIn}) AND c.unique_source_count >= ?
+    `).all(...def.claimTypes, def.minimumEvidence) as Array<{
+      source_id: string;
+      source_title: string;
+      metadata_json: string | null;
+      quote: string | null;
+      canonical_text: string;
+      chunk_id: string | null;
+    }>;
+
+    return rows.map((r, i) => {
+      let date = '';
+      try {
+        if (r.metadata_json) {
+          date = JSON.parse(r.metadata_json).date || '';
+        }
+      } catch {}
+      return {
+        id: `dyn-${i}`,
+        wikiPageId: wikiPageId,
+        sourceId: r.source_id,
+        chunkId: r.chunk_id || undefined,
+        claimText: r.canonical_text,
+        quote: r.quote || undefined,
+        sourceTitle: r.source_title || 'Untitled',
+        sourceDate: date,
+      };
+    });
+  } else {
+    const rows = db.prepare(`
+      SELECT id, wiki_page_id as wikiPageId, source_id as sourceId, chunk_id as chunkId, claim_text as claimText, quote, source_title as sourceTitle, source_date as sourceDate
+      FROM citations
+      WHERE wiki_page_id = ?
+      ORDER BY created_at DESC
+    `).all(wikiPageId) as any[];
+    
+    return rows.map(r => ({
+      ...r,
+      chunkId: r.chunkId || undefined,
+      quote: r.quote || undefined,
+      sourceTitle: r.sourceTitle || undefined,
+      sourceDate: r.sourceDate || undefined,
+    }));
+  }
 }
 
 /**
@@ -97,11 +95,30 @@ export function getCitationsForPage(wikiPageId: string): Citation[] {
  */
 export function getPagesCitingSource(sourceId: string): string[] {
   const db = getDb();
-  const rows = db.prepare(`
+  const explicit = db.prepare(`
     SELECT DISTINCT wp.slug
     FROM citations c
     JOIN wiki_pages wp ON wp.id = c.wiki_page_id
     WHERE c.source_id = ?
   `).all(sourceId) as Array<{ slug: string }>;
-  return rows.map(r => r.slug);
+
+  const claimTypes = db.prepare(`
+    SELECT DISTINCT c.type, c.unique_source_count
+    FROM claims c
+    JOIN claim_evidence ce ON ce.claim_id = c.id
+    JOIN observations o ON o.id = ce.observation_id
+    WHERE o.source_id = ?
+  `).all(sourceId) as Array<{ type: string; unique_source_count: number }>;
+
+  const slugs = new Set(explicit.map(r => r.slug));
+
+  for (const ct of claimTypes) {
+    for (const def of wikiPageDefinitions) {
+      if (def.claimTypes.includes(ct.type) && ct.unique_source_count >= def.minimumEvidence) {
+        slugs.add(def.slug);
+      }
+    }
+  }
+
+  return Array.from(slugs);
 }

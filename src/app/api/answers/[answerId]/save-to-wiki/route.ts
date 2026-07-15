@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuid } from 'uuid';
 import { getDb } from '@/lib/db/client';
+import { persistWikiMarkdown } from '@/lib/wiki/persistence';
 
 const ORG = 'default';
 
@@ -106,6 +107,8 @@ export async function POST(
       sourcesUsed.length,
       answer.confidence,
     );
+    
+    await persistWikiMarkdown(slug, contentMd);
 
     // Link evidence as citations (only when a real sourceId is present).
     const insertCitation = db.prepare(

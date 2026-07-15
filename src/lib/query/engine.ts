@@ -146,15 +146,9 @@ export async function answerQuestion(question: string): Promise<AnswerResult> {
   const registry = buildEvidenceRegistry(selected, sourceMeta);
 
   const wikiMatches = searchWikiPages(question);
-  let wikiContext = "";
-  if (wikiMatches.length > 0) {
-    wikiContext = wikiMatches
-      .slice(0, 3)
-      .map((w) => `=== WIKI: ${w.title} ===\n${w.content.slice(0, 1800)}`)
-      .join("\n\n");
-  }
+  // Wiki context removed to save context window.
 
-  if (selected.length === 0 && !wikiContext) {
+  if (selected.length === 0) {
     return {
       answer: "Not enough evidence to answer this question. Please upload more sources related to this topic.",
       evidence: [],
@@ -185,7 +179,7 @@ Return JSON:
   "suggestedAction": "what to do next"
 }`;
 
-  const userPrompt = `COMPILED WIKI:\n${wikiContext}\n\nRETRIEVED EVIDENCE:\n${evidenceBlock}\n\nQUESTION: ${question}`;
+  const userPrompt = `RETRIEVED EVIDENCE:\n${evidenceBlock}\n\nQUESTION: ${question}`;
 
   const response = await chatCompletion(
     [
@@ -210,6 +204,15 @@ Return JSON:
     type: "chunk" as const,
   }));
 
+  // Scrub invalid citation markers from the answer text
+  let cleanAnswer = parsed.answer;
+  for (const inv of invalid) {
+    const regex = new RegExp(`\\[${inv}\\]`, "g");
+    cleanAnswer = cleanAnswer.replace(regex, "");
+  }
+  // Clean up any empty bracket pairs that might result or trailing spaces before punctuation
+  cleanAnswer = cleanAnswer.replace(/\s+([.,!?])/g, "$1").replace(/\[\s*\]/g, "");
+
   const coverage = measureCoverage(parsed.answer, invalid.length);
   const uniqueSources = new Set(evidence.map((e) => e.sourceId)).size;
   const avgScore =
@@ -227,7 +230,7 @@ Return JSON:
   const dateRange = dates.length >= 2 ? `${dates[0]} to ${dates[dates.length - 1]}` : dates[0] || "";
 
   return {
-    answer: parsed.answer,
+    answer: cleanAnswer,
     evidence,
     confidence: serverConfidence.label,
     confidenceScore: serverConfidence.score,
@@ -245,8 +248,15 @@ function computeConfidence(
   coverage: number,
   avgScore: number,
 ): { score: number; label: "high" | "medium" | "low" } {
+  // Normalize RRF (theoretical max for 3 retrievers is ~0.05)
+  const normalizedScore = Math.min(1, avgScore * 20);
   const diversity = Math.min(1, uniqueSources / 3);
-  const score = Math.min(1, 0.35 * diversity + 0.25 * coverage + 0.4 * Math.min(1, avgScore));
+  let score = Math.min(1, 0.35 * diversity + 0.25 * coverage + 0.4 * normalizedScore);
+
+  // Gates
+  if (uniqueSources < 2) score = Math.min(score, 0.6); // Requires diversity for high
+  if (coverage < 0.4) score = Math.min(score, 0.3);    // Requires coverage for medium/high
+
   const label: "high" | "medium" | "low" = score >= 0.7 ? "high" : score >= 0.4 ? "medium" : "low";
   return { score, label };
 }

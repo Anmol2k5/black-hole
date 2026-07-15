@@ -32,7 +32,7 @@ function confidenceBar(c: number): string {
 }
 
 export function renderClaimPage(def: WikiPageDefinition, claims: RenderedClaim[]): string {
-  const sorted = [...claims].sort((a, b) => b.uniqueSourceCount - a.uniqueSourceCount);
+  const sorted = claims;
   const totalSources = new Set(sorted.flatMap((c) => c.sources.map((s) => s.title))).size;
 
   const lines: string[] = [];

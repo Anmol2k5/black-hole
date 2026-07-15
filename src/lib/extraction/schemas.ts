@@ -81,6 +81,9 @@ export const ChunkLocationSchema = z.object({
   timestampEnd: z.number().optional(),
   speaker: z.string().optional(),
   sectionTitle: z.string().optional(),
+  chunkId: z.string().optional(),
+  quoteStart: z.number().optional(),
+  quoteEnd: z.number().optional(),
 });
 
 export type ChunkLocation = z.infer<typeof ChunkLocationSchema>;

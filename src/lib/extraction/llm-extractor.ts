@@ -13,7 +13,6 @@
 
 import { getConfig } from "../config";
 import { extractJSON } from "../llm/provider";
-import { splitForExtraction } from "../ingestion/chunker";
 import {
   ExtractionResultSchema,
   ObservationSchema,
@@ -69,23 +68,33 @@ async function extractDocumentMeta(sample: string, filename: string): Promise<Do
   }
 }
 
-/**
- * Extract structured insights from a document using LLM (map-reduce).
- */
 export async function extractInsights(
   text: string,
+  chunks: Array<{ id: string; content: string; charStart: number; charEnd: number }>,
   filename: string,
 ): Promise<ExtractionResultV2> {
   // 1. Document-level metadata + summary (from a leading sample).
   const docMeta = await extractDocumentMeta(text.slice(0, META_SAMPLE_CHARS), filename);
 
   // 2. Chunk-level observations across the WHOLE document.
-  const segments = splitForExtraction(text, EXTRACT_SEGMENT_CHARS, EXTRACT_OVERLAP_CHARS);
   const allObservations: Observation[] = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    const locationHint = { sectionIndex: i, charStart: seg.charStart, charEnd: seg.charEnd };
-    const obs = await extractChunkObservations(seg.content, locationHint);
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const locationHint = { sectionIndex: i, charStart: chunk.charStart, charEnd: chunk.charEnd, chunkId: chunk.id };
+    const obs = await extractChunkObservations(chunk.content, locationHint);
+    
+    // Attempt exact quote matching inside chunk.content to add offset metadata
+    for (const o of obs) {
+      if (o.quote) {
+        const localOffset = chunk.content.indexOf(o.quote);
+        if (localOffset >= 0) {
+          if (!o.location) o.location = {};
+          o.location.quoteStart = chunk.charStart + localOffset;
+          o.location.quoteEnd = chunk.charStart + localOffset + o.quote.length;
+        }
+      }
+    }
+    
     allObservations.push(...obs);
   }
 

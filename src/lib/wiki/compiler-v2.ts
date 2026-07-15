@@ -10,7 +10,8 @@ import { getDb } from "../db/client";
 import { wikiPageDefinitions, type WikiPageDefinition } from "./definitions";
 import { renderClaimPage, type RenderedClaim, type RenderedSource } from "./renderer";
 import { getClaims } from "../claims/repository";
-import { getRawDirectory } from "../paths";
+import { getWikiDirectory } from "../paths";
+import { persistWikiMarkdown } from "./persistence";
 
 const ORG = "default";
 
@@ -74,7 +75,7 @@ export function ensureWikiPagesFromDefinitions(): void {
   }
 }
 
-export function compileWikiFromClaims(orgId: string = ORG): void {
+export async function compileWikiFromClaims(orgId: string = ORG): Promise<void> {
   const db = getDb();
   ensureWikiPagesFromDefinitions();
 
@@ -92,7 +93,8 @@ export function compileWikiFromClaims(orgId: string = ORG): void {
       sources: sourcesForClaim(c.id),
     }));
 
-    const sorted = sortClaims(claims, def.sort);
+    const eligibleClaims = claims.filter(c => c.uniqueSourceCount >= def.minimumEvidence);
+    const sorted = sortClaims(eligibleClaims, def.sort);
     const contentMd = renderClaimPage(def, sorted);
 
     const page = db
@@ -123,9 +125,11 @@ export function compileWikiFromClaims(orgId: string = ORG): void {
       `INSERT INTO wiki_page_versions (id, wiki_page_id, version, content_md, change_summary)
        VALUES (?, ?, ?, ?, ?)`,
     ).run(uuid(), page.id, last.v + 1, contentMd, `Compiled from ${sorted.length} claim(s)`);
+    
+    await persistWikiMarkdown(def.slug, contentMd);
   }
 
-  updateIndexPage();
+  await updateIndexPage();
 }
 
 function confidenceLabel(c: number): string {
@@ -134,7 +138,7 @@ function confidenceLabel(c: number): string {
   return "low";
 }
 
-function updateIndexPage(): void {
+async function updateIndexPage(): Promise<void> {
   const db = getDb();
   const pages = db
     .prepare("SELECT slug, title, category, source_count, updated_at FROM wiki_pages ORDER BY category, title")
@@ -142,11 +146,9 @@ function updateIndexPage(): void {
 
   const lines: string[] = ["# Wiki Index", ""];
   for (const p of pages) {
-    lines.push(`- [${p.title}](/wiki/${p.slug}) — ${p.source_count} source(s)`);
+    lines.push(`- [${p.title}](./${p.slug}.md) — ${p.source_count} source(s)`);
   }
   lines.push("");
 
-  const dir = getRawDirectory();
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(`${dir}/index.md`, lines.join("\n"), "utf-8");
+  await persistWikiMarkdown("index", lines.join("\n"));
 }

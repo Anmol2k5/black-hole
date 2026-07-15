@@ -19,7 +19,7 @@ import { chunkText } from "./chunker";
 import { embedBatch } from "../embeddings/provider";
 import { extractInsights } from "../extraction/llm-extractor";
 import { ensureWikiPagesFromDefinitions, compileWikiFromClaims } from "../wiki/compiler-v2";
-import { createCitationsFromExtraction } from "../citations/manager";
+// Citations are managed dynamically.
 import { storeObservationsForSource, rebuildClaims } from "../claims/repository";
 import {
   enqueue,
@@ -111,7 +111,8 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
     setStep(jobId, "Chunking text", 2);
     setSourceStatus(sourceId, "analyzing");
     const config = getConfig();
-    const chunks = chunkText(text, config.maxChunkSize, config.chunkOverlap);
+    const rawChunks = chunkText(text, config.maxChunkSize, config.chunkOverlap);
+    const chunks = rawChunks.map((c) => ({ id: uuid(), ...c }));
 
     // Step 3: embeddings
     setStep(jobId, "Generating embeddings", 3);
@@ -130,7 +131,7 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const embeddingJson = embeddings[i]?.length > 0 ? JSON.stringify(embeddings[i]) : null;
-        insertChunk.run(uuid(), sourceId, chunk.content, chunk.index, chunk.charStart, chunk.charEnd, embeddingJson);
+        insertChunk.run(chunk.id, sourceId, chunk.content, chunk.index, chunk.charStart, chunk.charEnd, embeddingJson);
       }
     });
     insertChunks();
@@ -138,7 +139,7 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
     // Step 4: LLM extraction
     setStep(jobId, "Analyzing with AI", 4);
     setSourceStatus(sourceId, "analyzing");
-    const extraction = await extractInsights(text, source.original_name);
+    const extraction = await extractInsights(text, chunks, source.original_name);
     db.prepare("INSERT INTO extractions (id, source_id, extraction_json) VALUES (?, ?, ?)").run(
       uuid(),
       sourceId,
@@ -164,16 +165,7 @@ export async function processIngestionJob(jobId: string, sourceId: string): Prom
     setStep(jobId, "Compiling wiki", 5);
     setSourceStatus(sourceId, "compiling");
     ensureWikiPagesFromDefinitions();
-    compileWikiFromClaims("default");
-
-    // Step 6: citations
-    setStep(jobId, "Creating citations", 6);
-    createCitationsFromExtraction(
-      sourceId,
-      extraction,
-      extraction.metadata.title || source.original_name,
-      extraction.metadata.date || "",
-    );
+    await compileWikiFromClaims("default");
 
     setSourceStatus(sourceId, "completed");
     markCompleted(jobId, { sourceId });

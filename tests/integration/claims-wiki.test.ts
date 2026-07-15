@@ -62,7 +62,7 @@ describe("claims layer", () => {
 describe("wiki compilation from claims", () => {
   beforeEach(resetDb);
 
-  it("creates configured pages and renders claims with evidence", () => {
+  it("creates configured pages and renders claims with evidence", async () => {
     makeSource("src-a"); const s1 = "src-a";
     storeObservationsForSource("default", s1, [
       obs("feature_request", "Customers want Slack integration", "high", 0.9),
@@ -71,7 +71,7 @@ describe("wiki compilation from claims", () => {
     rebuildClaims("default");
 
     ensureWikiPagesFromDefinitions();
-    compileWikiFromClaims("default");
+    await compileWikiFromClaims("default");
 
     const pages = getDb()
       .prepare("SELECT slug, title, content_md FROM wiki_pages ORDER BY slug")
@@ -86,16 +86,16 @@ describe("wiki compilation from claims", () => {
     expect(features.content_md).toContain("Evidence");
   });
 
-  it("stores a previous version before overwriting", () => {
+  it("stores a previous version before overwriting", async () => {
     makeSource("src-b"); const s1 = "src-b";
     storeObservationsForSource("default", s1, [obs("feature_request", "First version claim", "medium", 0.6)]);
     rebuildClaims("default");
     ensureWikiPagesFromDefinitions();
-    compileWikiFromClaims("default");
+    await compileWikiFromClaims("default");
 
     storeObservationsForSource("default", s1, [obs("feature_request", "Second version claim", "medium", 0.6)]);
     rebuildClaims("default");
-    compileWikiFromClaims("default");
+    await compileWikiFromClaims("default");
 
     const versions = getDb()
       .prepare("SELECT COUNT(*) as c FROM wiki_page_versions")
